@@ -9,22 +9,43 @@ class FallbackTreeItem {
 }
 
 class FallbackEventEmitter<T> {
-	public event = (_listener: (value: T) => void) => ({ dispose: () => {} });
-	fire(_value?: T) {}
+	public event = (listener: (value: T) => void) => {
+		void listener;
+		return { dispose: () => {} };
+	};
+	fire(value?: T) {
+		void value;
+	}
 }
 
 const fallbackVscode = {
 	window: {
-		showErrorMessage: async (_message: string) => undefined,
-		showInformationMessage: async (_message: string) => undefined,
-		showWarningMessage: async (_message: string) => undefined,
-		createOutputChannel: (_name?: string) => ({
-			append: (_value: string) => {},
-			appendLine: (_value: string) => {},
+		showErrorMessage: async (...args: unknown[]) => {
+			void args;
+			return undefined;
+		},
+		showInformationMessage: async (...args: unknown[]) => {
+			void args;
+			return undefined;
+		},
+		showWarningMessage: async (...args: unknown[]) => {
+			void args;
+			return undefined;
+		},
+		createOutputChannel: (...args: unknown[]) => {
+			void args;
+			return {
+				append: (value: string) => {
+					void value;
+				},
+				appendLine: (value: string) => {
+					void value;
+				},
 			clear: () => {},
 			show: () => {},
 			dispose: () => {},
-		}),
+			};
+		},
 		createWebviewPanel: () => ({
 			webview: {
 				html: '',
@@ -38,13 +59,19 @@ const fallbackVscode = {
 	workspace: {
 		getConfiguration: () => ({
 			get: (_key: string, defaultValue: unknown) => defaultValue,
-			update: async (..._args: unknown[]) => undefined,
+			update: async (...args: unknown[]) => {
+				void args;
+				return undefined;
+			},
 		}),
 		workspaceFolders: [] as unknown[],
 	},
 	Uri: {
 		file: (fsPath: string) => ({ fsPath, scheme: 'file' as const }),
-		parse: (_value: string) => ({}),
+		parse: (value: string) => {
+			void value;
+			return {};
+		},
 	},
 	ViewColumn: {
 		One: 1,

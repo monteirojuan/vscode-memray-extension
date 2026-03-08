@@ -175,7 +175,11 @@ export async function verifyMemray(command: string[]): Promise<boolean> {
     // safety timeout
     setTimeout(() => {
       if (!finished) {
-        try { child.kill('SIGKILL'); } catch {}
+        try {
+          child.kill('SIGKILL');
+        } catch (killError: unknown) {
+          void killError;
+        }
         finished = true;
         resolve(false);
       }

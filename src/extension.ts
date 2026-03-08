@@ -60,9 +60,10 @@ export function activate(context: vscode.ExtensionContext) {
       const html = await fs.readFile(abs, 'utf8');
       const panel = vscode.window.createWebviewPanel('memrayReport', path.basename(abs), { viewColumn: vscode.ViewColumn.One, preserveFocus: false }, { enableScripts: true, localResourceRoots: [vscode.Uri.file(path.dirname(abs))] });
       panel.webview.html = html;
-    } catch (err: any) {
-      output.appendLine(`Error opening result: ${err?.message || err}`);
-      vscode.window.showErrorMessage(`Failed to open result: ${err?.message || err}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      output.appendLine(`Error opening result: ${message}`);
+      vscode.window.showErrorMessage(`Failed to open result: ${message}`);
     }
   });
   context.subscriptions.push(openCmd);
@@ -230,7 +231,9 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           const raw = await fs.readFile(indexPath, 'utf8');
           index = JSON.parse(raw) as ResultEntry[];
-        } catch {}
+        } catch {
+          index = [];
+        }
         index.unshift({
           id,
           title: path.basename(scriptPath),
@@ -264,9 +267,10 @@ export function activate(context: vscode.ExtensionContext) {
           output.appendLine('Skipping auto-open because flamegraph generation failed.');
         }
       });
-    } catch (err: any) {
-      output.appendLine(`Error running memray: ${err?.message || err}`);
-      vscode.window.showErrorMessage(`Memray: ${err?.message || err}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      output.appendLine(`Error running memray: ${message}`);
+      vscode.window.showErrorMessage(`Memray: ${message}`);
     }
   });
   context.subscriptions.push(disposable);
@@ -283,6 +287,7 @@ class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
   }
 
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
+    void element;
     const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
     if (!ws) {
       return [new vscode.TreeItem('No workspace open')];
@@ -293,7 +298,7 @@ class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
       const raw = await fs.readFile(indexPath, 'utf8');
       const entries: ResultEntry[] = JSON.parse(raw);
       return entries.map(e => this.toTreeItem(e));
-    } catch (err) {
+    } catch {
       this.output.appendLine(`No .memray index found at ${indexPath}`);
       return [];
     }
