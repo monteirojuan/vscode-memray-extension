@@ -20,6 +20,21 @@ function makeSpawnMock(exitCode: number, delay = 0) {
   };
 }
 
+function makeSpawnSequence(exitCodes: number[], delay = 0) {
+  let idx = 0;
+  return (_cmd: string, _args: string[], _opts: any) => {
+    const child = new EventEmitter() as any;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = () => {};
+    const code = idx < exitCodes.length ? exitCodes[idx] : exitCodes[exitCodes.length - 1];
+    idx += 1;
+    if (delay > 0) setTimeout(() => child.emit('close', code), delay);
+    else process.nextTick(() => child.emit('close', code));
+    return child;
+  };
+}
+
 class FakeOutput {
   public lines: string[] = [];
   appendLine(s: string) { this.lines.push(s); }
@@ -55,6 +70,11 @@ describe('executor.runProfile', function () {
     const res = await mocked.runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run1' }, out as any);
     assert.strictEqual(res.binPath, path.join(tmp, 'run1.bin'));
     assert.strictEqual(res.htmlPath, path.join(tmp, 'run1.html'));
+    assert.strictEqual(res.statsPath, path.join(tmp, 'stats.json'));
+    assert.strictEqual(res.runOk, true);
+    assert.strictEqual(res.flamegraphOk, true);
+    assert.strictEqual(res.statsOk, true);
+    assert.deepStrictEqual(res.errors, []);
   });
 
   it('throws when memray run exits non-zero', async () => {
@@ -89,5 +109,36 @@ describe('executor.runProfile', function () {
       assert.ok(/memray run exited with code/.test(e.message));
     }
     assert.ok(threw, 'expected runProfile to throw');
+  });
+
+  it('returns partial result when flamegraph fails but stats succeeds', async () => {
+    const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'memray-run-'));
+
+    const mockDetection = {
+      detectMemray: async () => ({ command: ['memray'], path: 'memray', source: 'system', tried: [] }),
+      verifyMemray: async () => true,
+    };
+
+    const fakeVscode = {
+      window: { createOutputChannel: () => ({ appendLine: (_s: string) => {} }) },
+      workspace: { workspaceFolders: [] },
+      ProgressLocation: { Notification: 1 }
+    };
+
+    const fakeConfig = { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
+
+    const mocked = proxyquire('./src/memray/executor', {
+      '../utils/pythonDetection': mockDetection,
+      'child_process': { spawn: makeSpawnSequence([0, 5, 0]) },
+      vscode: fakeVscode,
+      '../config': fakeConfig
+    });
+
+    const out = new FakeOutput();
+    const res = await mocked.runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run3' }, out as any);
+    assert.strictEqual(res.runOk, true);
+    assert.strictEqual(res.flamegraphOk, false);
+    assert.strictEqual(res.statsOk, true);
+    assert.ok(res.errors.some((e: string) => /flamegraph/.test(e)));
   });
 });

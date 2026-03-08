@@ -16,7 +16,12 @@ export interface RunOptions {
 export interface RunResult {
   binPath: string;
   htmlPath: string;
+  statsPath: string;
   durationMs: number;
+  runOk: boolean;
+  flamegraphOk: boolean;
+  statsOk: boolean;
+  errors: string[];
 }
 
 function spawnProcess(command: string, args: string[], output: vscode.OutputChannel, timeoutMs?: number): Promise<{ code: number | null }> {
@@ -97,6 +102,7 @@ export async function runProfile(opts: RunOptions, output: vscode.OutputChannel)
 
   const binPath = path.join(outDir, `${opts.id}.bin`);
   const htmlPath = path.join(outDir, `${opts.id}.html`);
+  const statsPath = path.join(outDir, 'stats.json');
 
   // Build memray run args
   const runArgs: string[] = ['run'];
@@ -117,14 +123,50 @@ export async function runProfile(opts: RunOptions, output: vscode.OutputChannel)
     throw new Error(`memray run exited with code ${runRes.code}`);
   }
 
+  const errors: string[] = [];
+  let flamegraphOk = false;
+  let statsOk = false;
+
   // Generate flamegraph HTML
   output.appendLine(`Generating flamegraph HTML for ${binPath}`);
   const flameArgs = ['flamegraph', binPath, '-o', htmlPath];
-  const flameRes = await spawnProcess(runCommand, runPrefix.concat(flameArgs), output, 30_000);
-  if (flameRes.code !== 0) {
-    throw new Error(`memray flamegraph exited with code ${flameRes.code}`);
+  try {
+    const flameRes = await spawnProcess(runCommand, runPrefix.concat(flameArgs), output, 30_000);
+    flamegraphOk = flameRes.code === 0;
+    if (!flamegraphOk) {
+      errors.push(`memray flamegraph exited with code ${flameRes.code}`);
+      output.appendLine(`Warning: ${errors[errors.length - 1]}`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`memray flamegraph failed: ${msg}`);
+    output.appendLine(`Warning: ${errors[errors.length - 1]}`);
+  }
+
+  output.appendLine(`Generating stats JSON for ${binPath}`);
+  const statsArgs = ['stats', '--json', '-o', statsPath, '-f', binPath];
+  try {
+    const statsRes = await spawnProcess(runCommand, runPrefix.concat(statsArgs), output, 30_000);
+    statsOk = statsRes.code === 0;
+    if (!statsOk) {
+      errors.push(`memray stats exited with code ${statsRes.code}`);
+      output.appendLine(`Warning: ${errors[errors.length - 1]}`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`memray stats failed: ${msg}`);
+    output.appendLine(`Warning: ${errors[errors.length - 1]}`);
   }
 
   const durationMs = Date.now() - start;
-  return { binPath, htmlPath, durationMs };
+  return {
+    binPath,
+    htmlPath,
+    statsPath,
+    durationMs,
+    runOk: true,
+    flamegraphOk,
+    statsOk,
+    errors,
+  };
 }
