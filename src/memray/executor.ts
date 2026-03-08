@@ -1,9 +1,34 @@
-import { spawn } from 'child_process';
+import * as childProcess from 'child_process';
 import * as path from 'path';
 import { promises as fs } from 'fs';
-import * as vscode from 'vscode';
+import type * as VSCode from 'vscode';
+import vscode from '../vscodeApi';
 import detection from '../utils/pythonDetection';
 import cfg from '../config';
+
+type ExecutorDeps = {
+  spawn: typeof childProcess.spawn;
+  detection: typeof detection;
+  cfg: typeof cfg;
+  vscode: typeof vscode;
+};
+
+const defaultDeps: ExecutorDeps = {
+  spawn: childProcess.spawn,
+  detection,
+  cfg,
+  vscode,
+};
+
+let deps: ExecutorDeps = { ...defaultDeps };
+
+export function __setExecutorDepsForTests(overrides: Partial<ExecutorDeps>): void {
+  deps = { ...deps, ...overrides };
+}
+
+export function __resetExecutorDepsForTests(): void {
+  deps = { ...defaultDeps };
+}
 
 export interface RunOptions {
   scriptPath: string;
@@ -24,10 +49,10 @@ export interface RunResult {
   errors: string[];
 }
 
-function spawnProcess(command: string, args: string[], output: vscode.OutputChannel, timeoutMs?: number): Promise<{ code: number | null }> {
+function spawnProcess(command: string, args: string[], output: VSCode.OutputChannel, timeoutMs?: number): Promise<{ code: number | null }> {
   return new Promise((resolve, reject) => {
     output.appendLine(`$ ${command} ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`);
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = deps.spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
     child.stdout?.on('data', d => output.appendLine(d.toString()));
     child.stderr?.on('data', d => output.appendLine(d.toString()));
@@ -58,8 +83,8 @@ function spawnProcess(command: string, args: string[], output: vscode.OutputChan
   });
 }
 
-async function resolveMemrayCommand(output: vscode.OutputChannel): Promise<string[]> {
-  const detected = await detection.detectMemray();
+async function resolveMemrayCommand(output: VSCode.OutputChannel): Promise<string[]> {
+  const detected = await deps.detection.detectMemray();
   const tried = detected?.tried ?? [];
   if (!detected || !detected.command || detected.command.length === 0) {
     output.appendLine('memray detection failed. Attempted:');
@@ -74,7 +99,7 @@ async function resolveMemrayCommand(output: vscode.OutputChannel): Promise<strin
     for (const t of tried) output.appendLine(`  - ${t}`);
   }
 
-  const ok = await detection.verifyMemray(detected.command);
+  const ok = await deps.detection.verifyMemray(detected.command);
   if (!ok) {
     output.appendLine('Detected memray failed verification (--version).');
     throw new Error('Detected memray is not usable (failed --version).');
@@ -84,14 +109,14 @@ async function resolveMemrayCommand(output: vscode.OutputChannel): Promise<strin
   return detected.command;
 }
 
-export async function runProfile(opts: RunOptions, output: vscode.OutputChannel): Promise<RunResult> {
+export async function runProfile(opts: RunOptions, output: VSCode.OutputChannel): Promise<RunResult> {
   const start = Date.now();
-  const conf = cfg.getConfig();
+  const conf = deps.cfg.getConfig();
 
   // Determine output directory: prefer opts.outDir, otherwise use workspace + configured outputDirectory
   let outDir = opts.outDir;
   if (!outDir) {
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    const workspaceRoot = deps.vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
     outDir = path.join(workspaceRoot, conf.outputDirectory);
     output.appendLine(`Using configured output directory: ${outDir}`);
   }

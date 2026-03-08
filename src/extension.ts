@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import vscode from './vscodeApi';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import { runProfile } from './memray/executor';

@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { promisify } from 'util';
 import { exec, spawn } from 'child_process';
-import * as vscode from 'vscode';
+import vscode from '../vscodeApi';
 
 const execP = promisify(exec);
 

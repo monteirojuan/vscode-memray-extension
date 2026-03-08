@@ -1,11 +1,14 @@
 import * as assert from 'assert';
-import { createRequire } from 'module';
-const requireC = createRequire(process.cwd() + '/package.json');
-const proxyquire = requireC('proxyquire').noCallThru();
+import { __setVscodeForTests, __resetVscodeForTests } from '../src/vscodeApi';
+import { getConfig } from '../src/config';
 
 describe('config', () => {
-  it('reads configuration defaults from vscode', () => {
-    const fakeVscode = {
+  afterEach(() => {
+    __resetVscodeForTests();
+  });
+
+  it('reads configuration defaults from vscode', async () => {
+    const fakeVscode: any = {
       workspace: {
         getConfiguration: () => ({ get: (key: string, def: any) => {
           const map: any = {
@@ -19,8 +22,8 @@ describe('config', () => {
       }
     };
 
-    const cfg = proxyquire('./src/config', { vscode: fakeVscode });
-    const c = cfg.getConfig();
+    __setVscodeForTests(fakeVscode);
+    const c = getConfig();
     assert.strictEqual(c.nativeTracing, true);
     assert.strictEqual(c.outputDirectory, '.custom_memray');
     assert.strictEqual(c.keepHistoryDays, 7);

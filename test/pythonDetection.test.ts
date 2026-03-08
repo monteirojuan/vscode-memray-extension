@@ -3,9 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as util from 'util';
-import { createRequire } from 'module';
-const requireC = createRequire(process.cwd() + '/package.json');
-const proxyquire = requireC('proxyquire').noCallThru();
+import { __setVscodeForTests, __resetVscodeForTests } from '../src/vscodeApi';
+import { detectMemray } from '../src/utils/pythonDetection';
 
 describe('pythonDetection', function () {
   this.timeout(5000);
@@ -21,6 +20,7 @@ describe('pythonDetection', function () {
       await fs.promises.rm(tmpBase, { recursive: true, force: true });
     } catch {}
     delete process.env.VIRTUAL_ENV;
+    __resetVscodeForTests();
   });
 
   it('prefers workspace venv memray', async () => {
@@ -39,8 +39,8 @@ describe('pythonDetection', function () {
       },
     };
 
-    const pd = proxyquire('./src/utils/pythonDetection', { vscode: mockVscode });
-    const res = await pd.detectMemray();
+    __setVscodeForTests(mockVscode as any);
+    const res = await detectMemray();
     assert.ok(res.command && res.command[0].endsWith(path.join('.venv', 'bin', 'memray')));
     assert.strictEqual(res.source, 'workspace-venv');
   });
@@ -62,8 +62,8 @@ describe('pythonDetection', function () {
       },
     };
 
-    const pd = proxyquire('./src/utils/pythonDetection', { vscode: mockVscode });
-    const res = await pd.detectMemray();
+    __setVscodeForTests(mockVscode as any);
+    const res = await detectMemray();
     assert.ok(res.command && res.command[0].startsWith(venv));
     assert.strictEqual(res.source, 'env-venv');
   });
@@ -87,8 +87,8 @@ describe('pythonDetection', function () {
     const env = process.env.HOME;
     process.env.HOME = fakeHome;
     try {
-      const pd = proxyquire('./src/utils/pythonDetection', { vscode: mockVscode });
-      const res = await pd.detectMemray();
+      __setVscodeForTests(mockVscode as any);
+      const res = await detectMemray();
       assert.ok(res.command && res.command[0].startsWith(path.join(fakeHome, '.local')));
       assert.strictEqual(res.source, 'user-local');
     } finally {

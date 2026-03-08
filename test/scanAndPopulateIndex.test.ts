@@ -2,9 +2,20 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { createRequire } from 'module';
-const requireC = createRequire(process.cwd() + '/package.json');
-const proxyquire = requireC('proxyquire').noCallThru();
+import { __setVscodeForTests, __resetVscodeForTests } from '../src/vscodeApi';
+
+class FakeTreeItem {
+  public label: string;
+
+  constructor(label: string, _state?: number) {
+    this.label = label;
+  }
+}
+
+class FakeEventEmitter<T> {
+  public event = (_listener: (value: T) => void) => ({ dispose: () => {} });
+  fire(_value?: T) {}
+}
 
 class FakeOutput {
   lines: string[] = [];
@@ -13,6 +24,10 @@ class FakeOutput {
 
 describe('scanAndPopulateIndex', function () {
   this.timeout(5000);
+
+  afterEach(() => {
+    __resetVscodeForTests();
+  });
 
   it('builds index.json from various layouts', async () => {
     const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'scan-'));
@@ -37,9 +52,37 @@ describe('scanAndPopulateIndex', function () {
     await fs.promises.writeFile(path.join(memdir, 'loose.html'), '<html></html>');
     await fs.promises.writeFile(path.join(memdir, 'loose.bin'), 'BIN');
 
-    const fakeVscode = { workspace: { workspaceFolders: [{ uri: { fsPath: tmp } }] } };
-    const fakeExecutor = { runProfile: async () => ({ binPath: '', htmlPath: '', durationMs: 0 }) };
-    const ext = proxyquire('./src/extension', { vscode: fakeVscode, './memray/executor': fakeExecutor });
+    const fakeVscode = {
+      workspace: {
+        workspaceFolders: [{ uri: { fsPath: tmp } }],
+        getConfiguration: () => ({ get: (_key: string, def: unknown) => def }),
+      },
+      window: {
+        createOutputChannel: () => ({ appendLine: (_s: string) => {} }),
+        showInformationMessage: async (_msg: string) => undefined,
+        showWarningMessage: async (_msg: string) => undefined,
+        showErrorMessage: async (_msg: string) => undefined,
+        createWebviewPanel: () => ({ webview: { html: '' } }),
+        registerTreeDataProvider: (_id: string, _provider: any) => ({ dispose: () => {} }),
+      },
+      commands: {
+        registerCommand: (_id: string, _cb: (...args: any[]) => Promise<void> | void) => ({ dispose: () => {} }),
+        executeCommand: async (_id: string, ..._args: any[]) => undefined,
+      },
+      Uri: {
+        file: (fsPath: string) => ({ fsPath }),
+      },
+      RelativePattern: class {
+        constructor(_base: any, _pattern: string) {}
+      },
+      EventEmitter: FakeEventEmitter,
+      TreeItem: FakeTreeItem,
+      TreeItemCollapsibleState: { None: 0 },
+      ViewColumn: { One: 1 },
+      ProgressLocation: { Notification: 1 },
+    };
+    __setVscodeForTests(fakeVscode as any);
+    const ext = await import('../src/extension');
 
     const out = new FakeOutput();
     await ext.scanAndPopulateIndex(tmp, out as any);

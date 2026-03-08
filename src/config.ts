@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import vscode from './vscodeApi';
 
 export interface MemrayConfig {
   nativeTracing: boolean;

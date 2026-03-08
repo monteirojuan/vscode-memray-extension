@@ -2,10 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { createRequire } from 'module';
-
-const requireC = createRequire(process.cwd() + '/package.json');
-const proxyquire = requireC('proxyquire').noCallThru();
+import { __setVscodeForTests, __resetVscodeForTests } from '../src/vscodeApi';
 
 class FakeTreeItem {
   public label: string;
@@ -95,6 +92,10 @@ function createFakeVscode(workspaceRootRef: { current?: string }) {
 describe('context menu commands', function () {
   this.timeout(5000);
 
+  afterEach(() => {
+    __resetVscodeForTests();
+  });
+
   it('deletes result directory and removes index entry', async () => {
     const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ctx-del-'));
     const memrayDir = path.join(tmp, '.memray');
@@ -122,10 +123,8 @@ describe('context menu commands', function () {
 
     const workspaceRootRef: { current?: string } = {};
     const mock = createFakeVscode(workspaceRootRef);
-    const ext = proxyquire('./src/extension', {
-      vscode: mock.fakeVscode,
-      './memray/executor': { runProfile: async () => ({}) },
-    });
+    __setVscodeForTests(mock.fakeVscode as any);
+    const ext = await import('../src/extension');
 
     const context = { subscriptions: [] as any[] };
     ext.activate(context);
@@ -156,10 +155,8 @@ describe('context menu commands', function () {
     const outPath = path.join(tmp, 'exported.html');
     const workspaceRootRef: { current?: string } = {};
     const mock = createFakeVscode(workspaceRootRef);
-    const ext = proxyquire('./src/extension', {
-      vscode: mock.fakeVscode,
-      './memray/executor': { runProfile: async () => ({}) },
-    });
+    __setVscodeForTests(mock.fakeVscode as any);
+    const ext = await import('../src/extension');
 
     const context = { subscriptions: [] as any[] };
     ext.activate(context);

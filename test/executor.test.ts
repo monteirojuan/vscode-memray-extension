@@ -3,9 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { EventEmitter } from 'events';
-import { createRequire } from 'module';
-const requireC = createRequire(process.cwd() + '/package.json');
-const proxyquire = requireC('proxyquire').noCallThru();
+import { runProfile, __setExecutorDepsForTests, __resetExecutorDepsForTests } from '../src/memray/executor';
 
 function makeSpawnMock(exitCode: number, delay = 0) {
   return (_cmd: string, _args: string[], _opts: any) => {
@@ -43,6 +41,10 @@ class FakeOutput {
 describe('executor.runProfile', function () {
   this.timeout(5000);
 
+  afterEach(() => {
+    __resetExecutorDepsForTests();
+  });
+
   it('runs successfully when memray commands exit 0', async () => {
     const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'memray-run-'));
 
@@ -59,15 +61,15 @@ describe('executor.runProfile', function () {
 
     const fakeConfig = { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
 
-    const mocked = proxyquire('./src/memray/executor', {
-      '../utils/pythonDetection': mockDetection,
-      'child_process': { spawn: makeSpawnMock(0) },
-      vscode: fakeVscode,
-      '../config': fakeConfig
+    __setExecutorDepsForTests({
+      detection: mockDetection as any,
+      spawn: makeSpawnMock(0) as any,
+      vscode: fakeVscode as any,
+      cfg: fakeConfig as any,
     });
 
     const out = new FakeOutput();
-    const res = await mocked.runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run1' }, out as any);
+    const res = await runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run1' }, out as any);
     assert.strictEqual(res.binPath, path.join(tmp, 'run1.bin'));
     assert.strictEqual(res.htmlPath, path.join(tmp, 'run1.html'));
     assert.strictEqual(res.statsPath, path.join(tmp, 'stats.json'));
@@ -93,17 +95,17 @@ describe('executor.runProfile', function () {
 
     const fakeConfig = { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
 
-    const mocked = proxyquire('./src/memray/executor', {
-      '../utils/pythonDetection': mockDetection,
-      'child_process': { spawn: makeSpawnMock(42) },
-      vscode: fakeVscode,
-      '../config': fakeConfig
+    __setExecutorDepsForTests({
+      detection: mockDetection as any,
+      spawn: makeSpawnMock(42) as any,
+      vscode: fakeVscode as any,
+      cfg: fakeConfig as any,
     });
 
     const out = new FakeOutput();
     let threw = false;
     try {
-      await mocked.runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run2' }, out as any);
+      await runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run2' }, out as any);
     } catch (e: any) {
       threw = true;
       assert.ok(/memray run exited with code/.test(e.message));
@@ -127,15 +129,15 @@ describe('executor.runProfile', function () {
 
     const fakeConfig = { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
 
-    const mocked = proxyquire('./src/memray/executor', {
-      '../utils/pythonDetection': mockDetection,
-      'child_process': { spawn: makeSpawnSequence([0, 5, 0]) },
-      vscode: fakeVscode,
-      '../config': fakeConfig
+    __setExecutorDepsForTests({
+      detection: mockDetection as any,
+      spawn: makeSpawnSequence([0, 5, 0]) as any,
+      vscode: fakeVscode as any,
+      cfg: fakeConfig as any,
     });
 
     const out = new FakeOutput();
-    const res = await mocked.runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run3' }, out as any);
+    const res = await runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run3' }, out as any);
     assert.strictEqual(res.runOk, true);
     assert.strictEqual(res.flamegraphOk, false);
     assert.strictEqual(res.statsOk, true);
