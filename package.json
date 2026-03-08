@@ -38,6 +38,22 @@
       {
         "command": "memray.profileFile",
         "title": "Profile with Memray"
+      },
+      {
+        "command": "memray.viewFlamegraph",
+        "title": "View Flamegraph"
+      },
+      {
+        "command": "memray.openOutputDirectory",
+        "title": "Open Output Directory"
+      },
+      {
+        "command": "memray.deleteResult",
+        "title": "Delete Result"
+      },
+      {
+        "command": "memray.exportHtml",
+        "title": "Export as HTML"
       }
     ],
     "viewsContainers": {
@@ -53,11 +69,35 @@
       "memray": [
         {
           "id": "memrayResults",
-          "name": "Results"
+          "name": "Results",
+          "icon": "media/memray.svg"
         }
       ]
-    }
-    ,
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "memray.viewFlamegraph",
+          "when": "view == memrayResults && viewItem == memrayResultHasHtml",
+          "group": "inline"
+        },
+        {
+          "command": "memray.openOutputDirectory",
+          "when": "view == memrayResults && viewItem =~ /^memrayResult/",
+          "group": "navigation"
+        },
+        {
+          "command": "memray.exportHtml",
+          "when": "view == memrayResults && viewItem == memrayResultHasHtml",
+          "group": "navigation"
+        },
+        {
+          "command": "memray.deleteResult",
+          "when": "view == memrayResults && viewItem =~ /^memrayResult/",
+          "group": "navigation@99"
+        }
+      ]
+    },
     "configuration": {
       "title": "Memray",
       "properties": {
@@ -86,9 +126,5 @@
   },
   "extensionDependencies": [
     "ms-python.python"
-  ],
-  "activationEvents": [
-    "onCommand:memray.profileFile",
-    "onView:memrayResults"
   ]
 }

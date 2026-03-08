@@ -21,6 +21,8 @@ interface ResultEntry {
   errors?: string[];
 }
 
+type MemrayResultItem = vscode.TreeItem & { entry?: ResultEntry };
+
 export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Memray');
   context.subscriptions.push(output);
@@ -64,6 +66,102 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(openCmd);
+
+  const viewFlamegraphCmd = vscode.commands.registerCommand('memray.viewFlamegraph', async (item?: MemrayResultItem) => {
+    if (!item?.entry?.html) {
+      vscode.window.showWarningMessage('No flamegraph HTML available for this result.');
+      return;
+    }
+    await vscode.commands.executeCommand('memray.openResult', item.entry.html);
+  });
+  context.subscriptions.push(viewFlamegraphCmd);
+
+  const openOutputDirCmd = vscode.commands.registerCommand('memray.openOutputDirectory', async (item?: MemrayResultItem) => {
+    const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (!ws) {
+      vscode.window.showWarningMessage('Open a workspace to access memray results.');
+      return;
+    }
+    if (!item?.entry) {
+      vscode.window.showWarningMessage('No result selected.');
+      return;
+    }
+
+    const runDir = await resolveRunDirectory(ws.uri.fsPath, item.entry);
+    if (!runDir) {
+      vscode.window.showWarningMessage('Could not determine output directory for this result.');
+      return;
+    }
+
+    await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(runDir));
+  });
+  context.subscriptions.push(openOutputDirCmd);
+
+  const deleteResultCmd = vscode.commands.registerCommand('memray.deleteResult', async (item?: MemrayResultItem) => {
+    const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (!ws) {
+      vscode.window.showWarningMessage('Open a workspace to manage memray results.');
+      return;
+    }
+    if (!item?.entry) {
+      vscode.window.showWarningMessage('No result selected.');
+      return;
+    }
+
+    const answer = await vscode.window.showWarningMessage(
+      `Delete result "${item.entry.title || item.entry.id}"?`,
+      { modal: true },
+      'Delete'
+    );
+    if (answer !== 'Delete') {
+      return;
+    }
+
+    const runDir = await resolveRunDirectory(ws.uri.fsPath, item.entry);
+    if (runDir) {
+      try {
+        await fs.rm(runDir, { recursive: true, force: true });
+      } catch (err: unknown) {
+        output.appendLine(`Failed to delete run directory ${runDir}: ${err}`);
+      }
+    }
+
+    await removeIndexEntry(ws.uri.fsPath, item.entry);
+    provider.refresh();
+    vscode.window.showInformationMessage('Memray result deleted.');
+  });
+  context.subscriptions.push(deleteResultCmd);
+
+  const exportHtmlCmd = vscode.commands.registerCommand('memray.exportHtml', async (item?: MemrayResultItem) => {
+    const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (!ws) {
+      vscode.window.showWarningMessage('Open a workspace to export results.');
+      return;
+    }
+    if (!item?.entry?.html) {
+      vscode.window.showWarningMessage('No flamegraph HTML available for this result.');
+      return;
+    }
+
+    const sourceHtml = path.isAbsolute(item.entry.html)
+      ? item.entry.html
+      : path.join(ws.uri.fsPath, item.entry.html);
+
+    const defaultName = `${item.entry.id || 'memray-result'}.html`;
+    const targetUri = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(path.join(ws.uri.fsPath, defaultName)),
+      filters: { HTML: ['html'] },
+      saveLabel: 'Export HTML'
+    });
+
+    if (!targetUri) {
+      return;
+    }
+
+    await fs.copyFile(sourceHtml, targetUri.fsPath);
+    vscode.window.showInformationMessage(`Exported flamegraph to ${targetUri.fsPath}`);
+  });
+  context.subscriptions.push(exportHtmlCmd);
 
   // On activation, scan existing .memray artifacts and populate index.json
   (async () => {
@@ -205,10 +303,11 @@ class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     return element;
   }
 
-  private toTreeItem(e: ResultEntry): vscode.TreeItem {
+  private toTreeItem(e: ResultEntry): MemrayResultItem {
     const scriptOrTitle = e.title || e.script || e.id || path.basename(e.html || e.bin || 'result');
     const label = e.timestamp ? `${scriptOrTitle} (${formatRelativeTimestamp(e.timestamp)})` : scriptOrTitle;
-    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None) as MemrayResultItem;
+    item.entry = e;
     if (e.html) {
       item.command = {
         command: 'memray.openResult',
@@ -222,6 +321,7 @@ class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
         arguments: [e.bin]
       };
     }
+    item.contextValue = e.html ? 'memrayResultHasHtml' : 'memrayResult';
     const details: string[] = [];
     if (e.peakMemoryBytes !== undefined) {
       details.push(`Peak: ${formatBytes(e.peakMemoryBytes)}`);
@@ -347,6 +447,48 @@ export async function scanAndPopulateIndex(workspacePath: string, output: vscode
 }
 
 export function deactivate() {}
+
+async function resolveRunDirectory(workspacePath: string, entry: ResultEntry): Promise<string | undefined> {
+  const candidates = [entry.html, entry.stats, entry.bin].filter((value): value is string => Boolean(value));
+  for (const candidate of candidates) {
+    const absolute = path.isAbsolute(candidate) ? candidate : path.join(workspacePath, candidate);
+    const parent = path.dirname(absolute);
+    if (await fileExists(parent)) {
+      return parent;
+    }
+  }
+
+  if (entry.id) {
+    const fallback = path.join(workspacePath, '.memray', entry.id);
+    if (await fileExists(fallback)) {
+      return fallback;
+    }
+  }
+  return undefined;
+}
+
+async function removeIndexEntry(workspacePath: string, target: ResultEntry): Promise<void> {
+  const indexPath = path.join(workspacePath, '.memray', 'index.json');
+  let entries: ResultEntry[] = [];
+  try {
+    const raw = await fs.readFile(indexPath, 'utf8');
+    entries = JSON.parse(raw) as ResultEntry[];
+  } catch {
+    return;
+  }
+
+  const filtered = entries.filter(entry => !sameEntry(entry, target));
+  await fs.writeFile(indexPath, JSON.stringify(filtered, null, 2), 'utf8');
+}
+
+function sameEntry(left: ResultEntry, right: ResultEntry): boolean {
+  return (
+    left.id === right.id &&
+    left.timestamp === right.timestamp &&
+    left.html === right.html &&
+    left.bin === right.bin
+  );
+}
 
 function ensureRelativePath(workspacePath: string, value: string): string {
   return path.isAbsolute(value) ? path.relative(workspacePath, value) : value;
