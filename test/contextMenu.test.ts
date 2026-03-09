@@ -171,4 +171,57 @@ describe('context menu commands', function () {
     const exported = await fs.promises.readFile(outPath, 'utf8');
     assert.strictEqual(exported, '<html>export</html>');
   });
+
+  it('clears all result directories and resets index', async () => {
+    const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ctx-clear-'));
+    const memrayDir = path.join(tmp, '.memray');
+    const run1 = path.join(memrayDir, 'run1');
+    const run2 = path.join(memrayDir, 'run2');
+    await fs.promises.mkdir(run1, { recursive: true });
+    await fs.promises.mkdir(run2, { recursive: true });
+    await fs.promises.writeFile(path.join(run1, 'result.html'), '<html>one</html>', 'utf8');
+    await fs.promises.writeFile(path.join(run2, 'result.html'), '<html>two</html>', 'utf8');
+
+    const entries = [
+      {
+        id: 'run1',
+        title: 'a.py',
+        html: path.join('.memray', 'run1', 'result.html'),
+        bin: path.join('.memray', 'run1', 'run1.bin'),
+        timestamp: '2026-03-08T00:00:00.000Z',
+      },
+      {
+        id: 'run2',
+        title: 'b.py',
+        html: path.join('.memray', 'run2', 'result.html'),
+        bin: path.join('.memray', 'run2', 'run2.bin'),
+        timestamp: '2026-03-08T01:00:00.000Z',
+      }
+    ];
+    await fs.promises.writeFile(path.join(memrayDir, 'index.json'), JSON.stringify(entries, null, 2), 'utf8');
+
+    const workspaceRootRef: { current?: string } = {};
+    const mock = createFakeVscode(workspaceRootRef);
+    __setVscodeForTests(mock.fakeVscode as any);
+    const ext = await import('../src/extension');
+
+    const context = { subscriptions: [] as any[] };
+    ext.activate(context);
+    mock.setWorkspaceRoot(tmp);
+    mock.setWarningResponse('Clear All');
+
+    const cmd = mock.commands.get('memray.clearResults');
+    assert.ok(cmd, 'memray.clearResults should be registered');
+
+    await cmd!();
+
+    const run1Exists = await fs.promises.stat(run1).then(() => true).catch(() => false);
+    const run2Exists = await fs.promises.stat(run2).then(() => true).catch(() => false);
+    assert.strictEqual(run1Exists, false, 'expected run1 to be deleted');
+    assert.strictEqual(run2Exists, false, 'expected run2 to be deleted');
+
+    const indexRaw = await fs.promises.readFile(path.join(memrayDir, 'index.json'), 'utf8');
+    const index = JSON.parse(indexRaw);
+    assert.deepStrictEqual(index, []);
+  });
 });

@@ -118,20 +118,35 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    const runDir = await resolveRunDirectory(ws.uri.fsPath, item.entry);
-    if (runDir) {
-      try {
-        await fs.rm(runDir, { recursive: true, force: true });
-      } catch (err: unknown) {
-        output.appendLine(`Failed to delete run directory ${runDir}: ${err}`);
-      }
-    }
+    await deleteResultArtifacts(ws.uri.fsPath, item.entry, output);
 
     await removeIndexEntry(ws.uri.fsPath, item.entry);
     provider.refresh();
     vscode.window.showInformationMessage('Memray result deleted.');
   });
   context.subscriptions.push(deleteResultCmd);
+
+  const clearResultsCmd = vscode.commands.registerCommand('memray.clearResults', async () => {
+    const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (!ws) {
+      vscode.window.showWarningMessage('Open a workspace to manage memray results.');
+      return;
+    }
+
+    const answer = await vscode.window.showWarningMessage(
+      'Clear all Memray executions? This will delete all saved profiling artifacts.',
+      { modal: true },
+      'Clear All'
+    );
+    if (answer !== 'Clear All') {
+      return;
+    }
+
+    const removed = await clearAllResults(ws.uri.fsPath, output);
+    provider.refresh();
+    vscode.window.showInformationMessage(`Cleared ${removed} Memray execution${removed === 1 ? '' : 's'}.`);
+  });
+  context.subscriptions.push(clearResultsCmd);
 
   const exportHtmlCmd = vscode.commands.registerCommand('memray.exportHtml', async (item?: MemrayResultItem) => {
     const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
@@ -453,23 +468,65 @@ export async function scanAndPopulateIndex(workspacePath: string, output: vscode
 
 export function deactivate() {}
 
-async function resolveRunDirectory(workspacePath: string, entry: ResultEntry): Promise<string | undefined> {
+async function clearAllResults(workspacePath: string, output: vscode.OutputChannel): Promise<number> {
+  const indexPath = path.join(workspacePath, '.memray', 'index.json');
+  let entries: ResultEntry[] = [];
+  try {
+    const raw = await fs.readFile(indexPath, 'utf8');
+    entries = JSON.parse(raw) as ResultEntry[];
+  } catch {
+    entries = [];
+  }
+
+  for (const entry of entries) {
+    await deleteResultArtifacts(workspacePath, entry, output);
+  }
+
+  await fs.mkdir(path.dirname(indexPath), { recursive: true });
+  await fs.writeFile(indexPath, JSON.stringify([], null, 2), 'utf8');
+  return entries.length;
+}
+
+async function deleteResultArtifacts(workspacePath: string, entry: ResultEntry, output: vscode.OutputChannel): Promise<void> {
+  const memrayRoot = path.join(workspacePath, '.memray');
   const candidates = [entry.html, entry.stats, entry.bin].filter((value): value is string => Boolean(value));
+  const existingFiles: string[] = [];
+
   for (const candidate of candidates) {
     const absolute = path.isAbsolute(candidate) ? candidate : path.join(workspacePath, candidate);
-    const parent = path.dirname(absolute);
-    if (await fileExists(parent)) {
-      return parent;
+    if (await fileExists(absolute)) {
+      existingFiles.push(absolute);
     }
   }
 
-  if (entry.id) {
-    const fallback = path.join(workspacePath, '.memray', entry.id);
-    if (await fileExists(fallback)) {
-      return fallback;
+  const parentDirs = [...new Set(existingFiles.map(file => path.dirname(file)))];
+  const singleParent = parentDirs.length === 1 ? parentDirs[0] : undefined;
+  const entryDir = entry.id ? path.join(memrayRoot, entry.id) : undefined;
+
+  if (singleParent && entryDir && singleParent === entryDir && path.dirname(singleParent) === memrayRoot) {
+    try {
+      await fs.rm(singleParent, { recursive: true, force: true });
+      return;
+    } catch (err: unknown) {
+      output.appendLine(`Failed to delete run directory ${singleParent}: ${err}`);
     }
   }
-  return undefined;
+
+  for (const file of existingFiles) {
+    try {
+      await fs.rm(file, { force: true });
+    } catch (err: unknown) {
+      output.appendLine(`Failed to delete file ${file}: ${err}`);
+    }
+  }
+
+  if (entryDir && path.dirname(entryDir) === memrayRoot && await fileExists(entryDir)) {
+    try {
+      await fs.rm(entryDir, { recursive: true, force: true });
+    } catch (err: unknown) {
+      output.appendLine(`Failed to delete run directory ${entryDir}: ${err}`);
+    }
+  }
 }
 
 async function removeIndexEntry(workspacePath: string, target: ResultEntry): Promise<void> {

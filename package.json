@@ -57,7 +57,13 @@
       },
       {
         "command": "memray.deleteResult",
-        "title": "Delete Result"
+        "title": "Delete Result",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "memray.clearResults",
+        "title": "Clear All Results",
+        "icon": "$(clear-all)"
       },
       {
         "command": "memray.exportHtml",
@@ -102,6 +108,18 @@
         {
           "command": "memray.deleteResult",
           "when": "view == memrayResults && viewItem =~ /^memrayResult/",
+          "group": "inline@99"
+        },
+        {
+          "command": "memray.deleteResult",
+          "when": "view == memrayResults && viewItem =~ /^memrayResult/",
+          "group": "navigation@99"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "memray.clearResults",
+          "when": "view == memrayResults",
           "group": "navigation@99"
         }
       ]
