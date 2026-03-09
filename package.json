@@ -10,6 +10,7 @@
   },
   "main": "./dist/extension.cjs",
   "scripts": {
+    "test:ci": "npm test",
     "build": "webpack --mode production",
     "watch": "webpack --watch --mode development",
     "compile": "tsc -p tsconfig.json",
