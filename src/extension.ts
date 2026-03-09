@@ -27,6 +27,27 @@ export function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Memray');
   context.subscriptions.push(output);
 
+  const updateProfileButtonContext = () => {
+    const hasWorkspace = Boolean(vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0);
+    const activeEditor = vscode.window.activeTextEditor;
+    const activeEditorIsPython = Boolean(activeEditor && activeEditor.document.languageId === 'python');
+    void vscode.commands.executeCommand('setContext', 'memray.hasWorkspace', hasWorkspace);
+    void vscode.commands.executeCommand('setContext', 'memray.activeEditorIsPython', activeEditorIsPython);
+  };
+
+  updateProfileButtonContext();
+  if (typeof vscode.window.onDidChangeActiveTextEditor === 'function') {
+    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => updateProfileButtonContext()));
+  }
+  if (typeof vscode.workspace.onDidChangeWorkspaceFolders === 'function') {
+    context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => updateProfileButtonContext()));
+  }
+
+  const profileCurrentFileCmd = vscode.commands.registerCommand('memray.profileCurrentFile', async () => {
+    await vscode.commands.executeCommand('memray.profileFile');
+  });
+  context.subscriptions.push(profileCurrentFileCmd);
+
   const provider = new MemrayResultsProvider(output);
   vscode.window.registerTreeDataProvider('memrayResults', provider);
   // Register a refresh command

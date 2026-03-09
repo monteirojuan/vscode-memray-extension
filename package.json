@@ -48,6 +48,11 @@
         "title": "Profile with Memray"
       },
       {
+        "command": "memray.profileCurrentFile",
+        "title": "Profile Current Python File",
+        "icon": "$(play)"
+      },
+      {
         "command": "memray.viewFlamegraph",
         "title": "View Flamegraph"
       },
@@ -89,6 +94,12 @@
       ]
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "memray.profileCurrentFile",
+          "when": "false"
+        }
+      ],
       "view/item/context": [
         {
           "command": "memray.viewFlamegraph",
@@ -117,6 +128,11 @@
         }
       ],
       "view/title": [
+        {
+          "command": "memray.profileCurrentFile",
+          "when": "view == memrayResults && memray.hasWorkspace && memray.activeEditorIsPython",
+          "group": "navigation"
+        },
         {
           "command": "memray.clearResults",
           "when": "view == memrayResults",
