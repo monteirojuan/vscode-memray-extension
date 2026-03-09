@@ -4,7 +4,8 @@
   "description": "VS Code extension to run Memray and display flamegraphs",
   "version": "0.1.0-alpha",
   "type": "module",
-  "publisher": "your-publisher",
+  "publisher": "JuanMonteiro",
+  "repository": "https://github.com/monteirojuan/vscode-memray-extension",
   "engines": {
     "vscode": "^1.80.0"
   },
