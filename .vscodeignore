@@ -1,0 +1,34 @@
+# Development and repository metadata
+.git/**
+.github/**
+.vscode/**
+.memray/**
+.eslintrc.json
+.gitignore
+
+# Source, tests, and docs
+docs/**
+src/**
+test/**
+
+# Build and tooling config not needed at runtime
+package-lock.json
+tsconfig.json
+webpack.config.js
+scripts/**
+!scripts/export_flamegraph.py
+
+# Keep only the packaged extension entrypoint from dist
+dist/**
+!dist/extension.cjs
+
+# Packaged artifacts from previous builds
+memray-profiler-*.vsix
+
+# Only keep webview runtime dependencies from node_modules
+node_modules/**
+!node_modules/d3/build/d3.min.js
+!node_modules/d3-flame-graph/dist/**
+
+# Source maps are not needed in the VSIX
+dist/**/*.map
