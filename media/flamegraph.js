@@ -13,6 +13,9 @@
   let altPressed = false;
   let hoveredNode = null;
 
+  const getContainerWidth = () =>
+    Math.round(graphContainer.getBoundingClientRect().width) || graphContainer.clientWidth || 0;
+
   const hasSource = (node) => {
     const n = node && node.data ? node.data : node;
     if (!n || !n.file || n.line <= 0) return false;
@@ -155,7 +158,11 @@
       graphContainer.innerHTML = '<p>No frames match the selected filters.</p>';
       return;
     }
-    graphContainer.innerHTML = '';
+    // Do NOT clear graphContainer.innerHTML here. d3-flamegraph keeps an
+    // internal reference to the <svg> it creates and re-uses it on every
+    // call via enter/update/exit. Clearing the DOM breaks that reference,
+    // causing subsequent render() calls (e.g. on resize) to operate on a
+    // detached node and produce a blank view.
     window.d3.select(graphContainer).datum(filtered).call(chart);
     if (searchBox.value) {
       chart.search(searchBox.value);
@@ -163,9 +170,17 @@
     bindFrameHovers();
   };
 
+  // Re-render on size changes. Uses requestAnimationFrame so the width is
+  // measured after layout has settled. Skips if the container is still
+  // collapsed to zero (mid-animation).
   window.addEventListener('resize', () => {
-    chart.width(graphContainer.clientWidth || 1000);
-    render();
+    requestAnimationFrame(() => {
+      const w = getContainerWidth();
+      if (w > 0) {
+        chart.width(w);
+        render();
+      }
+    });
   });
 
   window.addEventListener('keydown', (event) => {
