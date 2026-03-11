@@ -18,6 +18,28 @@ class FallbackEventEmitter<T> {
 	}
 }
 
+class FallbackPosition {
+	public line: number;
+	public character: number;
+
+	constructor(line: number, character: number) {
+		this.line = line;
+		this.character = character;
+	}
+}
+
+class FallbackRange {
+	public start: FallbackPosition;
+	public end: FallbackPosition;
+
+	constructor(start: FallbackPosition, end: FallbackPosition) {
+		this.start = start;
+		this.end = end;
+	}
+}
+
+class FallbackSelection extends FallbackRange {}
+
 const fallbackVscode = {
 	window: {
 		showErrorMessage: async (...args: unknown[]) => {
@@ -55,6 +77,15 @@ const fallbackVscode = {
 			onDidDispose: () => {},
 			reveal: () => {},
 		}),
+		showTextDocument: async (...args: unknown[]) => {
+			void args;
+			return {
+				selection: undefined,
+				revealRange: (...revealArgs: unknown[]) => {
+					void revealArgs;
+				},
+			};
+		},
 	},
 	workspace: {
 		getConfiguration: () => ({
@@ -65,6 +96,10 @@ const fallbackVscode = {
 			},
 		}),
 		workspaceFolders: [] as unknown[],
+		openTextDocument: async (...args: unknown[]) => {
+			void args;
+			return {};
+		},
 	},
 	Uri: {
 		file: (fsPath: string) => ({ fsPath, scheme: 'file' as const }),
@@ -76,6 +111,10 @@ const fallbackVscode = {
 	ViewColumn: {
 		One: 1,
 	},
+	Position: FallbackPosition,
+	Range: FallbackRange,
+	Selection: FallbackSelection,
+	TextEditorRevealType: { InCenter: 0 },
 	TreeItem: FallbackTreeItem,
 	EventEmitter: FallbackEventEmitter,
 	TreeItemCollapsibleState: { None: 0 },

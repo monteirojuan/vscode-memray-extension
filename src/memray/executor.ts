@@ -1,9 +1,11 @@
 import * as childProcess from 'child_process';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { promises as fs } from 'fs';
 import type * as VSCode from 'vscode';
 import vscode from '../vscodeApi';
 import detection from '../utils/pythonDetection';
+import { detectMemrayPython } from '../utils/memrayPython';
 import cfg from '../config';
 
 type ExecutorDeps = {
@@ -21,6 +23,7 @@ const defaultDeps: ExecutorDeps = {
 };
 
 let deps: ExecutorDeps = { ...defaultDeps };
+const EXECUTOR_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export function __setExecutorDepsForTests(overrides: Partial<ExecutorDeps>): void {
   deps = { ...deps, ...overrides };
@@ -42,9 +45,13 @@ export interface RunResult {
   binPath: string;
   htmlPath: string;
   statsPath: string;
+  flamegraphJsonPath: string;
   durationMs: number;
   runOk: boolean;
   flamegraphOk: boolean;
+  nativeFlamegraphOk: boolean;
+  renderer: 'native' | 'html-fallback';
+  memrayVersion?: string;
   statsOk: boolean;
   errors: string[];
 }
@@ -128,6 +135,7 @@ export async function runProfile(opts: RunOptions, output: VSCode.OutputChannel)
   const binPath = path.join(outDir, `${opts.id}.bin`);
   const htmlPath = path.join(outDir, `${opts.id}.html`);
   const statsPath = path.join(outDir, 'stats.json');
+  const flamegraphJsonPath = path.join(outDir, 'flamegraph.json');
 
   // Build memray run args
   const runArgs: string[] = ['run'];
@@ -150,7 +158,9 @@ export async function runProfile(opts: RunOptions, output: VSCode.OutputChannel)
 
   const errors: string[] = [];
   let flamegraphOk = false;
+  let nativeFlamegraphOk = false;
   let statsOk = false;
+  let memrayVersion: string | undefined;
 
   // Generate flamegraph HTML
   output.appendLine(`Generating flamegraph HTML for ${binPath}`);
@@ -183,14 +193,59 @@ export async function runProfile(opts: RunOptions, output: VSCode.OutputChannel)
     output.appendLine(`Warning: ${errors[errors.length - 1]}`);
   }
 
+  if (statsOk) {
+    output.appendLine('Generating native flamegraph JSON artifact');
+    try {
+      const configuredPythonPath = conf.pythonPath.trim() || undefined;
+      const memrayPython = await detectMemrayPython(memrayCmd, configuredPythonPath, deps.spawn);
+      if (!memrayPython.pythonPath) {
+        errors.push(`memray-capable Python not found. Tried: ${memrayPython.tried.join(', ') || 'none'}`);
+        output.appendLine(`Warning: ${errors[errors.length - 1]}`);
+      } else {
+        memrayVersion = memrayPython.memrayVersion;
+        const exporterPath = path.resolve(EXECUTOR_DIR, '../../scripts/export_flamegraph.py');
+        const exporterArgs = [
+          exporterPath,
+          '--bin',
+          binPath,
+          '--output',
+          flamegraphJsonPath,
+          '--run-id',
+          opts.id,
+          '--script',
+          opts.scriptPath,
+          '--stats',
+          statsPath,
+        ];
+        if (nativeFlag) {
+          exporterArgs.push('--native-traces');
+        }
+        const exporterRes = await spawnProcess(memrayPython.pythonPath, exporterArgs, output, 60_000);
+        nativeFlamegraphOk = exporterRes.code === 0;
+        if (!nativeFlamegraphOk) {
+          errors.push(`flamegraph exporter exited with code ${exporterRes.code}`);
+          output.appendLine(`Warning: ${errors[errors.length - 1]}`);
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`flamegraph exporter failed: ${msg}`);
+      output.appendLine(`Warning: ${errors[errors.length - 1]}`);
+    }
+  }
+
   const durationMs = Date.now() - start;
   return {
     binPath,
     htmlPath,
     statsPath,
+    flamegraphJsonPath,
     durationMs,
     runOk: true,
     flamegraphOk,
+    nativeFlamegraphOk,
+    renderer: nativeFlamegraphOk ? 'native' : 'html-fallback',
+    memrayVersion,
     statsOk,
     errors,
   };

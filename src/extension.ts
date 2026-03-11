@@ -2,14 +2,17 @@ import vscode from './vscodeApi';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import { runProfile } from './memray/executor';
+import { readFlamegraphData } from './memray/flamegraphModel';
 import { readStatsSummaryFromFile } from './memray/stats';
 import { createMemrayOutputDir } from './utils/pathResolver';
+import { openNativeFlamegraphPanel } from './views/flamegraphWebview';
 
 interface ResultEntry {
   id: string;
   title?: string;
   script?: string;
   html?: string;
+  flamegraphJson?: string;
   bin?: string;
   stats?: string;
   timestamp?: string;
@@ -17,6 +20,9 @@ interface ResultEntry {
   peakMemoryBytes?: number;
   runOk?: boolean;
   flamegraphOk?: boolean;
+  nativeFlamegraphOk?: boolean;
+  renderer?: 'native' | 'html-fallback';
+  memrayVersion?: string;
   statsOk?: boolean;
   errors?: string[];
 }
@@ -68,7 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(watcher);
   }
 
-  // Command to open a result HTML inside a Webview
+  // Command to open a result in either native flamegraph webview or HTML fallback webview
   const openCmd = vscode.commands.registerCommand('memray.openResult', async (relativePath?: string) => {
     if (!relativePath) {
       vscode.window.showWarningMessage('No result file provided');
@@ -78,6 +84,16 @@ export function activate(context: vscode.ExtensionContext) {
     if (!ws) return vscode.window.showWarningMessage('Open a workspace to view results');
     try {
       const abs = path.isAbsolute(relativePath) ? relativePath : path.join(ws.uri.fsPath, relativePath);
+      if (abs.endsWith('.json')) {
+        const flamegraphData = await readFlamegraphData(abs);
+        await openNativeFlamegraphPanel(
+          context,
+          path.basename(abs),
+          flamegraphData,
+          async (sourcePath, line) => openSourceLocation(ws.uri.fsPath, flamegraphData.script, sourcePath, line),
+        );
+        return;
+      }
       const html = await fs.readFile(abs, 'utf8');
       const panel = vscode.window.createWebviewPanel('memrayReport', path.basename(abs), { viewColumn: vscode.ViewColumn.One, preserveFocus: false }, { enableScripts: true, localResourceRoots: [vscode.Uri.file(path.dirname(abs))] });
       panel.webview.html = html;
@@ -90,11 +106,12 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(openCmd);
 
   const viewFlamegraphCmd = vscode.commands.registerCommand('memray.viewFlamegraph', async (item?: MemrayResultItem) => {
-    if (!item?.entry?.html) {
-      vscode.window.showWarningMessage('No flamegraph HTML available for this result.');
+    const target = item?.entry?.flamegraphJson || item?.entry?.html;
+    if (!target) {
+      vscode.window.showWarningMessage('No flamegraph artifact available for this result.');
       return;
     }
-    await vscode.commands.executeCommand('memray.openResult', item.entry.html);
+    await vscode.commands.executeCommand('memray.openResult', target);
   });
   context.subscriptions.push(viewFlamegraphCmd);
 
@@ -249,12 +266,16 @@ export function activate(context: vscode.ExtensionContext) {
           script: scriptPath,
           bin: result.binPath,
           html: result.htmlPath,
+          flamegraphJson: result.flamegraphJsonPath,
           stats: result.statsPath,
           timestamp: new Date().toISOString(),
           durationMs: result.durationMs,
           peakMemoryBytes: statsSummary?.peakMemoryBytes,
           runOk: result.runOk,
           flamegraphOk: result.flamegraphOk,
+          nativeFlamegraphOk: result.nativeFlamegraphOk,
+          renderer: result.renderer,
+          memrayVersion: result.memrayVersion,
           statsOk: result.statsOk,
           errors: result.errors,
         };
@@ -275,6 +296,7 @@ export function activate(context: vscode.ExtensionContext) {
           title: path.basename(scriptPath),
           script: path.relative(ws.uri.fsPath, scriptPath),
           html: result.flamegraphOk ? path.relative(ws.uri.fsPath, result.htmlPath) : undefined,
+          flamegraphJson: result.nativeFlamegraphOk ? path.relative(ws.uri.fsPath, result.flamegraphJsonPath) : undefined,
           bin: path.relative(ws.uri.fsPath, result.binPath),
           stats: result.statsOk ? path.relative(ws.uri.fsPath, result.statsPath) : undefined,
           timestamp: meta.timestamp,
@@ -282,6 +304,9 @@ export function activate(context: vscode.ExtensionContext) {
           peakMemoryBytes: statsSummary?.peakMemoryBytes,
           runOk: result.runOk,
           flamegraphOk: result.flamegraphOk,
+          nativeFlamegraphOk: result.nativeFlamegraphOk,
+          renderer: result.renderer,
+          memrayVersion: result.memrayVersion,
           statsOk: result.statsOk,
           errors: result.errors,
         });
@@ -291,8 +316,15 @@ export function activate(context: vscode.ExtensionContext) {
         const statusNote = (!result.flamegraphOk || !result.statsOk) ? ' Saved as partial result.' : '';
         vscode.window.showInformationMessage(`Memray profiling complete.${peakLabel}${statusNote}`);
         provider.refresh();
-        // Auto-open the generated HTML result in the webview (if available)
-        if (result.flamegraphOk) {
+        // Auto-open native flamegraph when available; fallback to HTML
+        if (result.nativeFlamegraphOk) {
+          try {
+            const rel = path.relative(ws.uri.fsPath, result.flamegraphJsonPath);
+            await vscode.commands.executeCommand('memray.openResult', rel);
+          } catch (err) {
+            output.appendLine(`Failed to auto-open native flamegraph: ${err}`);
+          }
+        } else if (result.flamegraphOk) {
           try {
             const rel = path.relative(ws.uri.fsPath, result.htmlPath);
             await vscode.commands.executeCommand('memray.openResult', rel);
@@ -349,7 +381,13 @@ class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
     const label = e.timestamp ? `${scriptOrTitle} (${formatRelativeTimestamp(e.timestamp)})` : scriptOrTitle;
     const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None) as MemrayResultItem;
     item.entry = e;
-    if (e.html) {
+    if (e.flamegraphJson) {
+      item.command = {
+        command: 'memray.openResult',
+        title: 'Open Result',
+        arguments: [e.flamegraphJson]
+      };
+    } else if (e.html) {
       item.command = {
         command: 'memray.openResult',
         title: 'Open Result',
@@ -362,7 +400,13 @@ class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
         arguments: [e.bin]
       };
     }
-    item.contextValue = e.html ? 'memrayResultHasHtml' : 'memrayResult';
+    if (e.html) {
+      item.contextValue = 'memrayResultHasHtml';
+    } else if (e.flamegraphJson) {
+      item.contextValue = 'memrayResultHasNative';
+    } else {
+      item.contextValue = 'memrayResult';
+    }
     const details: string[] = [];
     if (e.peakMemoryBytes !== undefined) {
       details.push(`Peak: ${formatBytes(e.peakMemoryBytes)}`);
@@ -376,6 +420,7 @@ class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> 
       e.timestamp ? `Timestamp: ${e.timestamp}` : undefined,
       e.peakMemoryBytes !== undefined ? `Peak memory: ${formatBytes(e.peakMemoryBytes)}` : undefined,
       e.stats ? `Stats: ${e.stats}` : 'Stats: unavailable',
+      e.flamegraphJson ? `Native flamegraph: ${e.flamegraphJson}` : 'Native flamegraph: unavailable',
       e.html ? `Flamegraph: ${e.html}` : 'Flamegraph: unavailable',
       (e.errors && e.errors.length > 0) ? `Errors: ${e.errors.join('; ')}` : undefined,
     ].filter((line): line is string => Boolean(line)).join('\n');
@@ -420,6 +465,7 @@ export async function scanAndPopulateIndex(workspacePath: string, output: vscode
             title: meta.title || (meta.script ? path.basename(meta.script) : path.basename(p)),
             script: meta.script,
             html: meta.html ? ensureRelativePath(workspacePath, meta.html) : undefined,
+            flamegraphJson: meta.flamegraphJson ? ensureRelativePath(workspacePath, meta.flamegraphJson) : undefined,
             bin: meta.bin ? ensureRelativePath(workspacePath, meta.bin) : undefined,
             stats: meta.stats ? ensureRelativePath(workspacePath, meta.stats) : (await fileExists(statsAbs) ? path.relative(workspacePath, statsAbs) : undefined),
             timestamp: meta.timestamp || meta.created || s.mtime.toISOString(),
@@ -427,6 +473,9 @@ export async function scanAndPopulateIndex(workspacePath: string, output: vscode
             peakMemoryBytes: statsSummary?.peakMemoryBytes ?? meta.peakMemoryBytes ?? meta.peakMemory,
             runOk: meta.runOk ?? true,
             flamegraphOk: meta.flamegraphOk,
+            nativeFlamegraphOk: meta.nativeFlamegraphOk,
+            renderer: meta.renderer,
+            memrayVersion: meta.memrayVersion,
             statsOk: meta.statsOk ?? (statsSummary?.peakMemoryBytes !== undefined),
             errors: meta.errors,
           });
@@ -441,10 +490,12 @@ export async function scanAndPopulateIndex(workspacePath: string, output: vscode
         // fallback: scan for html/bin/stats inside directory
         const inside = await fs.readdir(p);
         let html: string | undefined;
+        let flamegraphJson: string | undefined;
         let bin: string | undefined;
         let stats: string | undefined;
         for (const f of inside) {
           if (f.endsWith('.html')) html = path.join(p, f);
+          if (f === 'flamegraph.json') flamegraphJson = path.join(p, f);
           if (f.endsWith('.bin')) bin = path.join(p, f);
           if (f === 'stats.json') stats = path.join(p, f);
         }
@@ -453,12 +504,15 @@ export async function scanAndPopulateIndex(workspacePath: string, output: vscode
           id: path.basename(p),
           title: path.basename(p),
           html: html ? path.relative(workspacePath, html) : undefined,
+          flamegraphJson: flamegraphJson ? path.relative(workspacePath, flamegraphJson) : undefined,
           bin: bin ? path.relative(workspacePath, bin) : undefined,
           stats: stats ? path.relative(workspacePath, stats) : undefined,
           timestamp: s.mtime.toISOString(),
           peakMemoryBytes: statsSummary?.peakMemoryBytes,
           runOk: Boolean(bin),
           flamegraphOk: Boolean(html),
+          nativeFlamegraphOk: Boolean(flamegraphJson),
+          renderer: flamegraphJson ? 'native' : 'html-fallback',
           statsOk: Boolean(stats),
           errors: [],
         });
@@ -489,6 +543,55 @@ export async function scanAndPopulateIndex(workspacePath: string, output: vscode
 
 export function deactivate() {}
 
+async function resolveRunDirectory(workspacePath: string, entry: ResultEntry): Promise<string | undefined> {
+  const candidates = [entry.flamegraphJson, entry.html, entry.stats, entry.bin]
+    .filter((value): value is string => Boolean(value))
+    .map(value => (path.isAbsolute(value) ? value : path.join(workspacePath, value)));
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) {
+      return path.dirname(candidate);
+    }
+  }
+
+  const guessed = entry.id ? path.join(workspacePath, '.memray', entry.id) : undefined;
+  if (guessed && await fileExists(guessed)) {
+    return guessed;
+  }
+
+  return undefined;
+}
+
+async function openSourceLocation(workspacePath: string, scriptPath: string, sourcePath: string, line: number): Promise<void> {
+  const lineIndex = Math.max(0, (line || 1) - 1);
+  const scriptDir = path.dirname(scriptPath);
+  const candidates = [
+    sourcePath,
+    path.isAbsolute(sourcePath) ? sourcePath : path.join(scriptDir, sourcePath),
+    path.isAbsolute(sourcePath) ? sourcePath : path.join(workspacePath, sourcePath),
+  ];
+
+  let resolvedPath: string | undefined;
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) {
+      resolvedPath = candidate;
+      break;
+    }
+  }
+
+  if (!resolvedPath) {
+    await vscode.window.showWarningMessage(`Source not found: ${sourcePath}`);
+    return;
+  }
+
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(resolvedPath));
+  const editor = await vscode.window.showTextDocument(document, { preview: false });
+  const position = new vscode.Position(lineIndex, 0);
+  const range = new vscode.Range(position, position);
+  editor.selection = new vscode.Selection(position, position);
+  editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+}
+
 async function clearAllResults(workspacePath: string, output: vscode.OutputChannel): Promise<number> {
   const indexPath = path.join(workspacePath, '.memray', 'index.json');
   let entries: ResultEntry[] = [];
@@ -510,7 +613,7 @@ async function clearAllResults(workspacePath: string, output: vscode.OutputChann
 
 async function deleteResultArtifacts(workspacePath: string, entry: ResultEntry, output: vscode.OutputChannel): Promise<void> {
   const memrayRoot = path.join(workspacePath, '.memray');
-  const candidates = [entry.html, entry.stats, entry.bin].filter((value): value is string => Boolean(value));
+  const candidates = [entry.flamegraphJson, entry.html, entry.stats, entry.bin].filter((value): value is string => Boolean(value));
   const existingFiles: string[] = [];
 
   for (const candidate of candidates) {
@@ -568,6 +671,7 @@ function sameEntry(left: ResultEntry, right: ResultEntry): boolean {
   return (
     left.id === right.id &&
     left.timestamp === right.timestamp &&
+    left.flamegraphJson === right.flamegraphJson &&
     left.html === right.html &&
     left.bin === right.bin
   );

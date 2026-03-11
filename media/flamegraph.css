@@ -1,0 +1,73 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+}
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border);
+}
+
+.toolbar input[type='search'],
+.toolbar select,
+.toolbar button {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  padding: 4px 8px;
+}
+
+.toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.toolbar .hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.content {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  min-height: 0;
+  height: 100%;
+}
+
+.graph {
+  overflow: auto;
+  padding: 8px;
+}
+
+.summary {
+  border-left: 1px solid var(--vscode-editorWidget-border);
+  padding: 10px;
+  font-size: 12px;
+}
+
+.summary h3 {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+}
+
+#summaryContent {
+  display: grid;
+  gap: 6px;
+}

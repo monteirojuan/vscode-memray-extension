@@ -59,7 +59,7 @@ describe('executor.runProfile', function () {
       ProgressLocation: { Notification: 1 }
     };
 
-    const fakeConfig = { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
+    const fakeConfig = { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
 
     __setExecutorDepsForTests({
       detection: mockDetection as any,
@@ -93,7 +93,7 @@ describe('executor.runProfile', function () {
       ProgressLocation: { Notification: 1 }
     };
 
-    const fakeConfig = { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
+    const fakeConfig = { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
 
     __setExecutorDepsForTests({
       detection: mockDetection as any,
@@ -127,7 +127,7 @@ describe('executor.runProfile', function () {
       ProgressLocation: { Notification: 1 }
     };
 
-    const fakeConfig = { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
+    const fakeConfig = { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
 
     __setExecutorDepsForTests({
       detection: mockDetection as any,

@@ -12,6 +12,7 @@ describe('config', () => {
       workspace: {
         getConfiguration: () => ({ get: (key: string, def: any) => {
           const map: any = {
+            pythonPath: '/opt/venv/bin/python',
             nativeTracing: true,
             outputDirectory: '.custom_memray',
             keepHistoryDays: 7,
@@ -24,6 +25,7 @@ describe('config', () => {
 
     __setVscodeForTests(fakeVscode);
     const c = getConfig();
+    assert.strictEqual(c.pythonPath, '/opt/venv/bin/python');
     assert.strictEqual(c.nativeTracing, true);
     assert.strictEqual(c.outputDirectory, '.custom_memray');
     assert.strictEqual(c.keepHistoryDays, 7);
