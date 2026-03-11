@@ -42,6 +42,7 @@ export async function openNativeFlamegraphPanel(
     { viewColumn: vscode.ViewColumn.One, preserveFocus: false },
     {
       enableScripts: true,
+      retainContextWhenHidden: true,
       localResourceRoots: [
         vscode.Uri.file(path.join(extensionContext.extensionPath, 'media')),
         vscode.Uri.file(path.join(extensionContext.extensionPath, 'node_modules')),
