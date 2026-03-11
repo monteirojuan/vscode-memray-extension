@@ -90,7 +90,7 @@ export function activate(context: vscode.ExtensionContext) {
           context,
           path.basename(abs),
           flamegraphData,
-          async (sourcePath, line) => openSourceLocation(ws.uri.fsPath, flamegraphData.script, sourcePath, line),
+          async (sourcePath, line) => openSourceLocation(ws.uri.fsPath, flamegraphData.script, sourcePath, line, output),
         );
         return;
       }
@@ -562,24 +562,34 @@ async function resolveRunDirectory(workspacePath: string, entry: ResultEntry): P
   return undefined;
 }
 
-async function openSourceLocation(workspacePath: string, scriptPath: string, sourcePath: string, line: number): Promise<void> {
+async function openSourceLocation(workspacePath: string, scriptPath: string, sourcePath: string, line: number, output?: vscode.OutputChannel): Promise<void> {
   const lineIndex = Math.max(0, (line || 1) - 1);
   const scriptDir = path.dirname(scriptPath);
-  const candidates = [
+
+  // Build a de-duplicated list of candidate paths to try
+  const raw: string[] = [
     sourcePath,
-    path.isAbsolute(sourcePath) ? sourcePath : path.join(scriptDir, sourcePath),
-    path.isAbsolute(sourcePath) ? sourcePath : path.join(workspacePath, sourcePath),
+    path.isAbsolute(sourcePath) ? '' : path.join(scriptDir, sourcePath),
+    path.isAbsolute(sourcePath) ? '' : path.join(workspacePath, sourcePath),
   ];
+  const candidates = [...new Set(raw.filter(Boolean))];
+
+  output?.appendLine(`[source navigation] Resolving: ${sourcePath}`);
+  for (const c of candidates) {
+    output?.appendLine(`[source navigation]   trying: ${c}`);
+  }
 
   let resolvedPath: string | undefined;
   for (const candidate of candidates) {
     if (await fileExists(candidate)) {
       resolvedPath = candidate;
+      output?.appendLine(`[source navigation]   found: ${resolvedPath}`);
       break;
     }
   }
 
   if (!resolvedPath) {
+    output?.appendLine(`[source navigation]   NOT FOUND — skipping`);
     await vscode.window.showWarningMessage(`Source not found: ${sourcePath}`);
     return;
   }

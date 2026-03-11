@@ -48,7 +48,8 @@ body {
   display: grid;
   grid-template-columns: 1fr 280px;
   min-height: 0;
-  height: 100%;
+  flex: 1;
+  overflow: hidden;
 }
 
 .graph {
@@ -70,4 +71,23 @@ body {
 #summaryContent {
   display: grid;
   gap: 6px;
+}
+
+.frame-info {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: var(--vscode-editor-font-family), monospace;
+  color: var(--vscode-descriptionForeground);
+  border-top: 1px solid var(--vscode-editorWidget-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 24px;
+  line-height: 14px;
+  transition: background 0.1s;
+}
+
+.frame-info.has-source {
+  color: var(--vscode-textLink-foreground);
+  background: var(--vscode-editor-hoverHighlightBackground);
 }

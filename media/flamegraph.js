@@ -9,7 +9,59 @@
   const hideImportSystem = document.getElementById('hideImportSystem');
   const threadFilter = document.getElementById('threadFilter');
   const summaryContent = document.getElementById('summaryContent');
+  const frameInfo = document.getElementById('frameInfo');
   let altPressed = false;
+  let hoveredNode = null;
+
+  const hasSource = (node) => {
+    const n = node && node.data ? node.data : node;
+    if (!n || !n.file || n.line <= 0) return false;
+    // filter virtual Python paths: <unknown>, <frozen ...>, <string>, <stdin>, etc.
+    if (n.file.startsWith('<') || n.file === 'memray') return false;
+    return true;
+  };
+
+  const updateFrameInfo = () => {
+    if (!hoveredNode) {
+      frameInfo.textContent = '';
+      frameInfo.className = 'frame-info';
+      return;
+    }
+    const n = hoveredNode.data ? hoveredNode.data : hoveredNode;
+    const fn = n.function || n.name || '';
+    const src = hasSource(n) ? `${n.file}:${n.line}` : null;
+    if (src) {
+      frameInfo.className = 'frame-info has-source';
+      const actionHint = altPressed ? '↵ Alt+Click to open' : 'Alt+Click to open source';
+      frameInfo.textContent = `${fn}  —  ${src}  —  ${actionHint}`;
+    } else {
+      frameInfo.className = 'frame-info';
+      frameInfo.textContent = fn ? `${fn}  —  no source available` : '';
+    }
+  };
+
+  const bindFrameHovers = () => {
+    window.d3.selectAll('#flamegraph .frame')
+      .on('mouseover.memray', function (d) {
+        hoveredNode = d;
+        updateFrameInfo();
+        if (hasSource(d)) {
+          this.style.cursor = altPressed ? 'alias' : 'zoom-in';
+        } else {
+          this.style.cursor = 'zoom-in';
+        }
+      })
+      .on('mouseout.memray', function () {
+        hoveredNode = null;
+        updateFrameInfo();
+        this.style.cursor = '';
+      })
+      .on('mousemove.memray', function (d) {
+        if (hasSource(d)) {
+          this.style.cursor = altPressed ? 'alias' : 'zoom-in';
+        }
+      });
+  };
   const flamegraphFactory = typeof window.flamegraph === 'function'
     ? window.flamegraph
     : (window.d3 && typeof window.d3.flamegraph === 'function' ? window.d3.flamegraph : undefined);
@@ -108,6 +160,7 @@
     if (searchBox.value) {
       chart.search(searchBox.value);
     }
+    bindFrameHovers();
   };
 
   window.addEventListener('resize', () => {
@@ -117,12 +170,23 @@
 
   window.addEventListener('keydown', (event) => {
     altPressed = Boolean(event.altKey);
+    updateFrameInfo();
+    if (altPressed && hoveredNode && hasSource(hoveredNode)) {
+      const frames = document.querySelectorAll('#flamegraph .frame');
+      frames.forEach(f => { f.style.cursor = 'alias'; });
+    }
   });
   window.addEventListener('keyup', (event) => {
     altPressed = Boolean(event.altKey);
+    updateFrameInfo();
+    if (!altPressed) {
+      const frames = document.querySelectorAll('#flamegraph .frame');
+      frames.forEach(f => { f.style.cursor = ''; });
+    }
   });
   window.addEventListener('blur', () => {
     altPressed = false;
+    updateFrameInfo();
   });
 
   searchBox.addEventListener('input', () => {

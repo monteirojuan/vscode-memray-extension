@@ -88,6 +88,7 @@ export async function openNativeFlamegraphPanel(
         <div id="summaryContent"></div>
       </aside>
     </div>
+    <div id="frameInfo" class="frame-info"></div>
   </div>
 
   <script nonce="${nonce}">window.__MEMRAY_FLAMEGRAPH_DATA__ = ${JSON.stringify(payload)};</script>
