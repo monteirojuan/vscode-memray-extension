@@ -143,4 +143,76 @@ describe('executor.runProfile', function () {
     assert.strictEqual(res.statsOk, true);
     assert.ok(res.errors.some((e: string) => /flamegraph/.test(e)));
   });
+
+  it('returns partial result when stats fails but flamegraph succeeds', async () => {
+    const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'memray-run-'));
+
+    const mockDetection = {
+      detectMemray: async () => ({ command: ['memray'], path: 'memray', source: 'system', tried: [] }),
+      verifyMemray: async () => true,
+    };
+
+    const fakeVscode = {
+      window: { createOutputChannel: () => ({ appendLine: (_s: string) => {} }) },
+      workspace: { workspaceFolders: [] },
+      ProgressLocation: { Notification: 1 }
+    };
+
+    const fakeConfig = { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
+
+    // run=0, flamegraph=0, stats=7
+    __setExecutorDepsForTests({
+      detection: mockDetection as any,
+      spawn: makeSpawnSequence([0, 0, 7]) as any,
+      vscode: fakeVscode as any,
+      cfg: fakeConfig as any,
+    });
+
+    const out = new FakeOutput();
+    const res = await runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run4' }, out as any);
+    assert.strictEqual(res.runOk, true);
+    assert.strictEqual(res.flamegraphOk, true);
+    assert.strictEqual(res.statsOk, false);
+    assert.ok(res.errors.some((e: string) => /stats/.test(e)));
+  });
+
+  it('passes --native flag when native option is true', async () => {
+    const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'memray-run-'));
+
+    const mockDetection = {
+      detectMemray: async () => ({ command: ['memray'], path: 'memray', source: 'system', tried: [] }),
+      verifyMemray: async () => true,
+    };
+
+    const fakeVscode = {
+      window: { createOutputChannel: () => ({ appendLine: (_s: string) => {} }) },
+      workspace: { workspaceFolders: [] },
+      ProgressLocation: { Notification: 1 }
+    };
+
+    const fakeConfig = { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }), default: { getConfig: () => ({ pythonPath: '', nativeTracing: false, outputDirectory: '.memray', keepHistoryDays: 30, timeoutSeconds: 0 }) } };
+
+    const capturedArgs: string[][] = [];
+    const spawnCapture = (_cmd: string, args: string[], _opts: any) => {
+      capturedArgs.push(args);
+      const child = new EventEmitter() as any;
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = () => {};
+      process.nextTick(() => child.emit('close', 0));
+      return child;
+    };
+
+    __setExecutorDepsForTests({
+      detection: mockDetection as any,
+      spawn: spawnCapture as any,
+      vscode: fakeVscode as any,
+      cfg: fakeConfig as any,
+    });
+
+    const out = new FakeOutput();
+    await runProfile({ scriptPath: 'script.py', outDir: tmp, id: 'run5', native: true }, out as any);
+    // First spawn invocation is the `run` step
+    assert.ok(capturedArgs[0].includes('--native'), 'expected --native flag in run args');
+  });
 });
