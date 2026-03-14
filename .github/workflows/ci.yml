@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   tests:
@@ -22,5 +24,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
+      - name: Run unit tests
         run: npm run test:ci
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "1"
+      MEMRAY_IT_TIMEOUT_MS: "120000"
+      ELECTRON_DISABLE_GPU: "1"
+      LIBVA_DRIVER_NAME: "dummy"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install system packages for VS Code test-electron
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0 libxss1
+          # Ubuntu 24.04+ ships t64 package names; older images still use libasound2.
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run VS Code integration tests (headless)
+        run: xvfb-run -a npm run test:integration
