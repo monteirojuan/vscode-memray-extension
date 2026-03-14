@@ -29,7 +29,7 @@ interface ResultEntry {
 
 type MemrayResultItem = vscode.TreeItem & { entry?: ResultEntry };
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Memray');
   context.subscriptions.push(output);
 
@@ -58,6 +58,14 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.window.registerTreeDataProvider('memrayResults', provider);
   // Register a refresh command
   const refreshCmd = vscode.commands.registerCommand('memray.refreshResults', async () => {
+    const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (ws) {
+      try {
+        await scanAndPopulateIndex(ws.uri.fsPath, output);
+      } catch (err) {
+        output.appendLine(`Error refreshing .memray index: ${err}`);
+      }
+    }
     provider.refresh();
     vscode.window.showInformationMessage('Memray results refreshed');
   });
@@ -217,17 +225,17 @@ export function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(exportHtmlCmd);
 
-  // On activation, scan existing .memray artifacts and populate index.json
-  (async () => {
-    const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
-    if (!ws) return;
+  // Ensure indexing completes before activation resolves so integration tests
+  // and first renderers see a ready .memray/index.json deterministically.
+  const wsForInitialScan = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+  if (wsForInitialScan) {
     try {
-      await scanAndPopulateIndex(ws.uri.fsPath, output);
+      await scanAndPopulateIndex(wsForInitialScan.uri.fsPath, output);
       provider.refresh();
     } catch (err) {
       output.appendLine(`Error scanning .memray directory: ${err}`);
     }
-  })();
+  }
 
   const disposable = vscode.commands.registerCommand('memray.profileFile', async (uri?: vscode.Uri) => {
     try {

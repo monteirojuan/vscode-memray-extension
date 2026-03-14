@@ -15,8 +15,11 @@
     "build": "webpack --mode production",
     "watch": "webpack --watch --mode development",
     "compile": "tsc -p tsconfig.json",
+    "compile:tests": "tsc -p tsconfig.integration.json && node -e \"require('fs').writeFileSync('dist/test/integration/package.json', JSON.stringify({type:'commonjs'}))\"",
     "lint": "eslint --ext .ts src",
     "test": "node --import tsx ./node_modules/mocha/bin/mocha --extension ts \"test/**/*.test.ts\" --exit",
+    "pretest:integration": "npm run build && npm run compile:tests",
+    "test:integration": "node test/integration/runTests.mjs",
     "package": "vsce package"
   },
   "devDependencies": {
@@ -175,8 +178,5 @@
         }
       }
     }
-  },
-  "extensionDependencies": [
-    "ms-python.python"
-  ]
+  }
 }

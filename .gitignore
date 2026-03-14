@@ -83,6 +83,7 @@ typings/
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+.vscode-test-userdata
 
 # yarn v2
 .yarn/cache
@@ -111,7 +112,7 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Memray output
-.memray/
+# Memray output – anchor to workspace root so test fixtures are still tracked
+/.memray/
 
 *.vsix
