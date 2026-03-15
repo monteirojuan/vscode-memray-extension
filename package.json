@@ -53,34 +53,47 @@
     "commands": [
       {
         "command": "memray.profileFile",
-        "title": "Profile with Memray"
+        "title": "Profile with Memray",
+        "category": "Memray"
       },
       {
         "command": "memray.profileCurrentFile",
-        "title": "Profile Current Python File",
+        "title": "Profile Active File",
+        "category": "Memray",
         "icon": "$(play)"
       },
       {
         "command": "memray.viewFlamegraph",
-        "title": "View Flamegraph"
+        "title": "View Flamegraph",
+        "category": "Memray"
       },
       {
         "command": "memray.openOutputDirectory",
-        "title": "Open Output Directory"
+        "title": "Open Output Directory",
+        "category": "Memray"
       },
       {
         "command": "memray.deleteResult",
         "title": "Delete Result",
+        "category": "Memray",
         "icon": "$(trash)"
       },
       {
         "command": "memray.clearResults",
         "title": "Clear All Results",
+        "category": "Memray",
         "icon": "$(clear-all)"
       },
       {
         "command": "memray.exportHtml",
-        "title": "Export as HTML"
+        "title": "Export as HTML",
+        "category": "Memray"
+      },
+      {
+        "command": "memray.refreshResults",
+        "title": "Refresh Results",
+        "category": "Memray",
+        "icon": "$(refresh)"
       }
     ],
     "viewsContainers": {
@@ -105,7 +118,37 @@
       "commandPalette": [
         {
           "command": "memray.profileCurrentFile",
+          "when": "editorLangId == python"
+        },
+        {
+          "command": "memray.viewFlamegraph",
           "when": "false"
+        },
+        {
+          "command": "memray.deleteResult",
+          "when": "false"
+        },
+        {
+          "command": "memray.openOutputDirectory",
+          "when": "false"
+        },
+        {
+          "command": "memray.exportHtml",
+          "when": "false"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "memray.profileFile",
+          "when": "resourceExtname == .py",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "memray.profileFile",
+          "when": "editorLangId == python",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -140,6 +183,11 @@
           "command": "memray.profileCurrentFile",
           "when": "view == memrayResults && memray.hasWorkspace && memray.activeEditorIsPython",
           "group": "navigation"
+        },
+        {
+          "command": "memray.refreshResults",
+          "when": "view == memrayResults",
+          "group": "navigation@98"
         },
         {
           "command": "memray.clearResults",
