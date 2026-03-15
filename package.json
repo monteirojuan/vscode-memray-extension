@@ -85,6 +85,12 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "memray.cleanupOldResults",
+        "title": "Clean Up Old Results",
+        "category": "Memray",
+        "icon": "$(history)"
+      },
+      {
         "command": "memray.exportHtml",
         "title": "Export as HTML",
         "category": "Memray"

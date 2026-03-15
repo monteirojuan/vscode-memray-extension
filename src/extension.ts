@@ -6,6 +6,7 @@ import { readFlamegraphData } from './memray/flamegraphModel';
 import { readStatsSummaryFromFile } from './memray/stats';
 import { createMemrayOutputDir } from './utils/pathResolver';
 import { openNativeFlamegraphPanel } from './views/flamegraphWebview';
+import { getConfig } from './config';
 
 interface ResultEntry {
   id: string;
@@ -231,11 +232,29 @@ export async function activate(context: vscode.ExtensionContext) {
   if (wsForInitialScan) {
     try {
       await scanAndPopulateIndex(wsForInitialScan.uri.fsPath, output);
-      provider.refresh();
+      const cleaned = await cleanupOldResults(wsForInitialScan.uri.fsPath, output);
+      if (cleaned > 0) provider.refresh();
+      else provider.refresh();
     } catch (err) {
       output.appendLine(`Error scanning .memray directory: ${err}`);
     }
   }
+
+  const cleanupOldResultsCmd = vscode.commands.registerCommand('memray.cleanupOldResults', async () => {
+    const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (!ws) {
+      vscode.window.showWarningMessage('Open a workspace to manage memray results.');
+      return;
+    }
+    const removed = await cleanupOldResults(ws.uri.fsPath, output);
+    provider.refresh();
+    if (removed > 0) {
+      vscode.window.showInformationMessage(`Removed ${removed} old Memray result${removed === 1 ? '' : 's'}.`);
+    } else {
+      vscode.window.showInformationMessage('No old Memray results to clean up.');
+    }
+  });
+  context.subscriptions.push(cleanupOldResultsCmd);
 
   const disposable = vscode.commands.registerCommand('memray.profileFile', async (uri?: vscode.Uri) => {
     try {
@@ -319,6 +338,9 @@ export async function activate(context: vscode.ExtensionContext) {
           errors: result.errors,
         });
         await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf8');
+
+        // Auto-cleanup stale results after each run
+        await cleanupOldResults(ws.uri.fsPath, output);
 
         const peakLabel = statsSummary?.peakMemoryBytes !== undefined ? ` Peak: ${formatBytes(statsSummary.peakMemoryBytes)}.` : '';
         const statusNote = (!result.flamegraphOk || !result.statsOk) ? ' Saved as partial result.' : '';
@@ -608,6 +630,43 @@ async function openSourceLocation(workspacePath: string, scriptPath: string, sou
   const range = new vscode.Range(position, position);
   editor.selection = new vscode.Selection(position, position);
   editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+}
+
+export async function cleanupOldResults(workspacePath: string, output: vscode.OutputChannel): Promise<number> {
+  const { keepHistoryDays } = getConfig();
+  if (keepHistoryDays <= 0) {
+    return 0;
+  }
+
+  const indexPath = path.join(workspacePath, '.memray', 'index.json');
+  let entries: ResultEntry[] = [];
+  try {
+    const raw = await fs.readFile(indexPath, 'utf8');
+    entries = JSON.parse(raw) as ResultEntry[];
+  } catch {
+    return 0;
+  }
+
+  const cutoff = Date.now() - keepHistoryDays * 86_400_000;
+  const toDelete = entries.filter(e => {
+    if (!e.timestamp) return false;
+    const ts = new Date(e.timestamp).getTime();
+    return Number.isFinite(ts) && ts < cutoff;
+  });
+
+  if (toDelete.length === 0) {
+    return 0;
+  }
+
+  for (const entry of toDelete) {
+    await deleteResultArtifacts(workspacePath, entry, output);
+  }
+
+  const toDeleteIds = new Set(toDelete.map(e => e.id));
+  const remaining = entries.filter(e => !toDeleteIds.has(e.id));
+  await fs.writeFile(indexPath, JSON.stringify(remaining, null, 2), 'utf8');
+  output.appendLine(`Auto-cleanup: removed ${toDelete.length} result${toDelete.length === 1 ? '' : 's'} older than ${keepHistoryDays} day${keepHistoryDays === 1 ? '' : 's'}.`);
+  return toDelete.length;
 }
 
 async function clearAllResults(workspacePath: string, output: vscode.OutputChannel): Promise<number> {
