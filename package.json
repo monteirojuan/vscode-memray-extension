@@ -20,6 +20,7 @@
     "test": "node --import tsx ./node_modules/mocha/bin/mocha --extension ts \"test/**/*.test.ts\" --exit",
     "pretest:integration": "npm run build && npm run compile:tests",
     "test:integration": "node test/integration/runTests.mjs",
+    "dev": "npm run build && node scripts/runManualTest.mjs",
     "package": "vsce package"
   },
   "devDependencies": {
