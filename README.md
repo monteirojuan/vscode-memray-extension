@@ -1,3 +1,8 @@
+[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/JuanMonteiro.memray-profiler?style=plastic&label=VS%20Code%20Installs)
+](https://marketplace.visualstudio.com/items?itemName=JuanMonteiro.memray-profiler)
+[![Open VSX Downloads](https://img.shields.io/open-vsx/dt/JuanMonteiro/memray-profiler?style=plastic&label=Open%20VSX%20Downloads)
+](https://open-vsx.org/extension/JuanMonteiro/memray-profiler)
+
 # Memray Profiler for VS Code
 
 A VS Code extension for memory profiling Python applications using memray.
