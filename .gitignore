@@ -116,3 +116,8 @@ Thumbs.db
 /.memray/
 
 *.vsix
+
+
+# Python
+*.pyc
+__pycache__/
