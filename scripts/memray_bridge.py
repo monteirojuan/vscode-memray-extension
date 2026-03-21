@@ -2,21 +2,19 @@
 """
 memray_bridge.py — Live Mode middleware for the VS Code Memray extension.
 
-Architecture (from PLAN_LIVE_PROFILE_FEATURE.md §3):
-  1. Connects to a `memray run --live-remote --live-port <PORT>` socket via
-     memray's SocketReader context-manager API.
-  2. Polls the reader at fixed intervals (default 500 ms) using
-     get_current_snapshot(merge_threads=False), which returns the current
-     live allocation state as a list of AllocationRecord objects.
-  3. Aggregates the snapshot into a single JSON object and emits it as a
-     compact line to stdout for Node.js to parse.
-  4. Exits cleanly when the target process finishes (reader.is_active == False)
-     or when SIGINT/SIGTERM is received.
+Architecture:
+  1. Waits for a .bin file to appear (written by `memray run --output <binPath>`).
+  2. Polls the file at fixed intervals using memray.FileReader, which can read
+     a partially-written .bin file while the target process is still running.
+  3. Aggregates the current high-watermark allocation records into a snapshot
+     JSON object and emits it as a compact line to stdout for Node.js to parse.
+  4. Exits cleanly when SIGINT/SIGTERM is received (the parent Node.js process
+     kills the bridge once the target exits).
 
 JSON schema emitted to stdout (one compact object per line):
   {
     "ts":    <int>   — Unix timestamp in milliseconds
-    "rss":   <int>   — total heap bytes (sum of all live allocation sizes)
+    "rss":   <int>   — total live heap bytes (sum of high-watermark record sizes)
     "heap":  <int>   — same as rss (kept for schema compatibility)
     "peak":  <int>   — high watermark across the whole session (bytes)
     "top":   [       — top N allocator frames by current live bytes
@@ -24,23 +22,24 @@ JSON schema emitted to stdout (one compact object per line):
         "func":   <str>
         "file":   <str>
         "line":   <int>
-        "mem":    <int>  — bytes currently attributed to this frame
-        "allocs": <int>  — allocation count currently attributed
+        "mem":    <int>  — bytes attributed to this frame
+        "allocs": <int>  — allocation count attributed
       }
     ]
   }
 
 Exit codes:
-  0 — clean stop (SIGINT / SIGTERM / target process finished)
+  0 — clean stop (SIGINT / SIGTERM)
   1 — startup / argument error
   2 — memray import error
-  3 — connection error
+  3 — file not found / read error
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import sys
 import time
@@ -55,13 +54,15 @@ from typing import Dict, List, Optional, Tuple
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Live memray bridge — polls allocation snapshots and emits JSON to stdout."
+        description=(
+            "Live memray bridge — polls a .bin file written by memray run "
+            "and emits JSON snapshots to stdout."
+        )
     )
     parser.add_argument(
-        "--port",
-        type=int,
+        "--bin-path",
         required=True,
-        help="TCP port where `memray run --live-remote` is listening.",
+        help="Path to the .bin file being written by `memray run --output`.",
     )
     parser.add_argument(
         "--interval",
@@ -75,35 +76,34 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         default=20,
         help="Number of top allocator frames to include per snapshot (default: 20).",
     )
+    parser.add_argument(
+        "--wait-timeout",
+        type=float,
+        default=30.0,
+        help="Seconds to wait for the .bin file to appear (default: 30).",
+    )
     return parser.parse_args(argv)
 
 
 # ---------------------------------------------------------------------------
-# Snapshot aggregation
+# Snapshot aggregation from FileReader records
 # ---------------------------------------------------------------------------
 
 # Maps (func, file, line) -> (total_mem_bytes, total_alloc_count)
 FrameStats = Dict[Tuple[str, str, int], Tuple[int, int]]
 
 
-def aggregate_snapshot(
-    records: list,
-    peak_bytes: int,
-    top_n: int,
-) -> Tuple[dict, int]:
+def aggregate_from_records(records: list, top_n: int) -> Tuple[int, list]:
     """
-    Convert a list of AllocationRecord objects (from get_current_snapshot) into
-    the JSON dict we emit, and return the updated peak_bytes watermark.
+    Convert a list of AllocationRecord objects into (heap_bytes, top_frames).
 
     Each AllocationRecord has:
-      .size          — bytes currently live for this allocation group
-      .n_allocations — number of live allocations in this group
+      .size          — bytes for this allocation group
+      .n_allocations — number of allocations in this group
       .stack_trace() — list of (func, file, line) tuples, innermost first
     """
     heap_bytes = sum(int(getattr(r, "size", 0) or 0) for r in records)
-    peak_bytes = max(peak_bytes, heap_bytes)
 
-    # Aggregate per (func, file, line) frame across all records
     frame_stats: FrameStats = defaultdict(lambda: (0, 0))
     for record in records:
         size = int(getattr(record, "size", 0) or 0)
@@ -138,14 +138,17 @@ def aggregate_snapshot(
         reverse=True,
     )[:top_n]
 
-    payload = {
+    return heap_bytes, top
+
+
+def build_snapshot(heap_bytes: int, peak_bytes: int, top: list) -> dict:
+    return {
         "ts": int(time.time() * 1000),
         "rss": heap_bytes,
         "heap": heap_bytes,
         "peak": peak_bytes,
         "top": top,
     }
-    return payload, peak_bytes
 
 
 def emit_json(payload: dict) -> None:
@@ -155,17 +158,17 @@ def emit_json(payload: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Core loop — SocketReader polling path
+# Core loop — FileReader polling path
 # ---------------------------------------------------------------------------
 
 
-def run_socket_reader(args: argparse.Namespace) -> int:
+def run_file_reader(args: argparse.Namespace) -> int:
     """
-    Connect to a live-remote socket using memray's SocketReader context manager
-    and poll get_current_snapshot() at the configured interval.
+    Poll a .bin file being written by `memray run --output <path>` using
+    memray's FileReader and emit JSON snapshots at each interval.
     """
     try:
-        from memray import SocketReader  # type: ignore[import]
+        from memray import FileReader  # type: ignore[import]
     except ImportError as exc:
         sys.stderr.write(f"[memray_bridge] Cannot import memray: {exc}\n")
         return 2
@@ -178,35 +181,42 @@ def run_socket_reader(args: argparse.Namespace) -> int:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
-    try:
-        reader = SocketReader(port=args.port)
-    except Exception as exc:
-        sys.stderr.write(f"[memray_bridge] Connection failed: {exc}\n")
-        return 3
-
-    peak_bytes = 0
+    bin_path = args.bin_path
     interval = args.interval
     top_n = args.top_n
+    wait_timeout = args.wait_timeout
 
-    try:
-        with reader:
-            while not _stop[0]:
-                try:
-                    records = list(reader.get_current_snapshot(merge_threads=False))
-                except Exception as exc:
-                    sys.stderr.write(f"[memray_bridge] Snapshot error: {exc}\n")
-                    break
+    # --- Wait for the .bin file to appear ---
+    deadline = time.monotonic() + wait_timeout
+    while not os.path.exists(bin_path):
+        if _stop[0]:
+            return 0
+        if time.monotonic() > deadline:
+            sys.stderr.write(f"[memray_bridge] Timed out waiting for {bin_path}\n")
+            return 3
+        time.sleep(0.1)
 
-                payload, peak_bytes = aggregate_snapshot(records, peak_bytes, top_n)
-                emit_json(payload)
+    sys.stderr.write(f"[memray_bridge] File found: {bin_path}\n")
+    sys.stderr.flush()
 
-                if not reader.is_active:
-                    break
+    peak_bytes = 0
 
-                time.sleep(interval)
+    # --- Poll loop ---
+    while not _stop[0]:
+        try:
+            reader = FileReader(bin_path)
+            records = list(
+                reader.get_high_watermark_allocation_records(merge_threads=True)
+            )
+            heap_bytes, top = aggregate_from_records(records, top_n)
+            peak_bytes = max(peak_bytes, heap_bytes)
+            payload = build_snapshot(heap_bytes, peak_bytes, top)
+            emit_json(payload)
+        except Exception as exc:
+            # File may still be in a partial/unreadable state — skip this tick
+            sys.stderr.write(f"[memray_bridge] Read error (skipping): {exc}\n")
 
-    except Exception as exc:
-        sys.stderr.write(f"[memray_bridge] Stream error: {exc}\n")
+        time.sleep(interval)
 
     return 0
 
@@ -218,7 +228,7 @@ def run_socket_reader(args: argparse.Namespace) -> int:
 
 def main() -> int:
     args = parse_args()
-    return run_socket_reader(args)
+    return run_file_reader(args)
 
 
 if __name__ == "__main__":

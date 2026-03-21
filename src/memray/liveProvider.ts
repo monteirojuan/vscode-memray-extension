@@ -54,6 +54,7 @@ export interface LiveSessionOptions {
   intervalSeconds?: number;   // aggregation window (default 0.5)
   topN?: number;              // top allocators to include (default 20)
   pythonPath?: string;        // override python interpreter
+  binPath?: string;           // path where memray will write the .bin file
 }
 
 export interface LiveSessionDeps {
@@ -76,8 +77,10 @@ export interface LiveSession {
   onError(listener: ErrorListener): void;
   /** Subscribe to session termination (called after both processes exit). */
   onStop(listener: StopListener): void;
-  /** The ephemeral port used for IPC. */
+  /** Reserved (kept for test compatibility). */
   readonly port: number;
+  /** Path to the .bin file being written by this session. */
+  readonly binPath: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,18 +207,26 @@ export async function startLiveSession(
     );
   }
 
-  // --- Reserve port ---
+  // --- Reserve port (no longer used for live-remote; kept for interface compat) ---
   const port = await _deps.findFreePort();
-  output.appendLine(`[live] Reserved port: ${port}`);
+  output.appendLine(`[live] Reserved port (unused): ${port}`);
 
-  // --- Spawn target process ---
+  // --- Resolve .bin output path ---
+  const binPath: string = opts.binPath ?? path.join(
+    path.dirname(opts.scriptPath),
+    `memray-live-${Date.now()}.bin`,
+  );
+  output.appendLine(`[live] .bin output: ${binPath}`);
+
+  // --- Spawn target process (normal run with --output, no --live-remote) ---
   const memrayCmd = detected.command[0];
   const memrayPrefix = detected.command.slice(1);
   const targetArgs = [
     ...memrayPrefix,
     'run',
-    '--live-remote',
-    '--live-port', String(port),
+    '--output', binPath,
+    '--no-compress',
+    '--force',
     '--',
     opts.scriptPath,
   ];
@@ -224,10 +235,10 @@ export async function startLiveSession(
   targetProc.stdout?.on('data', (d: Buffer) => output.appendLine(`[target] ${d.toString().trimEnd()}`));
   targetProc.stderr?.on('data', (d: Buffer) => output.appendLine(`[target] ${d.toString().trimEnd()}`));
 
-  // --- Spawn bridge process ---
+  // --- Spawn bridge process (FileReader polling mode) ---
   const bridgeArgs = [
     BRIDGE_SCRIPT,
-    '--port', String(port),
+    '--bin-path', binPath,
     '--interval', String(opts.intervalSeconds ?? 0.5),
     '--top-n', String(opts.topN ?? 20),
   ];
@@ -300,6 +311,7 @@ export async function startLiveSession(
   // --- Return session handle ---
   const session: LiveSession = {
     port,
+    binPath,
     stop: doStop,
     onSnapshot: (fn) => { snapshotListeners.push(fn); },
     onError: (fn) => { errorListeners.push(fn); },

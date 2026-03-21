@@ -6,11 +6,12 @@
  *   2. The splitJsonLines and parseSnapshot utilities work correctly
  *      in a real Node.js environment (not just unit-test stubs).
  *   3. The live bridge script (`scripts/memray_bridge.py`) exits cleanly when
- *      the port is unreachable — exercising the real process spawn path.
+ *      called with missing or invalid arguments — exercising the real process
+ *      spawn path.
  *
- * NOTE: Full end-to-end tests (spawning a real `memray run --live-remote`
- * process) require memray to be installed in the test environment and are
- * skipped automatically when it is not present.
+ * NOTE: Full end-to-end tests (spawning a real `memray run --output` process)
+ * require memray to be installed in the test environment and are skipped
+ * automatically when it is not present.
  */
 
 import * as assert from 'assert';
@@ -139,22 +140,26 @@ describe('integration: live mode — bridge script process', function () {
     }
   });
 
-  it('exits with code 2 and prints usage when --port is missing', async () => {
+  it('exits with code 2 and prints usage when --bin-path is missing', async () => {
     const { stderr, code } = await spawnBridge([]);
     assert.strictEqual(code, 2, `expected exit code 2, got ${code}`);
     assert.ok(
-      stderr.includes('--port') || stderr.includes('required'),
-      `expected usage error mentioning --port, got: ${stderr.slice(0, 200)}`,
+      stderr.includes('--bin-path') || stderr.includes('required'),
+      `expected usage error mentioning --bin-path, got: ${stderr.slice(0, 200)}`,
     );
   });
 
-  it('exits with code 3 when connecting to a closed port', async () => {
-    // Port 1 is privileged and always refused without root
-    const { code, stderr } = await spawnBridge(['--port', '1']);
-    // Either code 3 (connection refused) or 2 (memray import error — memray not installed)
+  it('exits with code 3 when the .bin file does not appear within timeout', async () => {
+    // Pass a path that will never exist and a very short wait timeout so the
+    // test completes quickly regardless of whether memray is installed.
+    const { code, stderr } = await spawnBridge([
+      '--bin-path', '/tmp/memray_bridge_test_nonexistent_file_that_will_never_exist.bin',
+      '--wait-timeout', '0.5',
+    ]);
+    // Exit code 2: memray not installed; exit code 3: file not found (timeout)
     assert.ok(
-      code === 3 || code === 2,
-      `expected exit code 2 or 3 for unreachable port, got ${code}\nstderr: ${stderr.slice(0, 300)}`,
+      code === 2 || code === 3,
+      `expected exit code 2 or 3, got ${code}\nstderr: ${stderr.slice(0, 300)}`,
     );
   });
 });
