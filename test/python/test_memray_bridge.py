@@ -221,7 +221,6 @@ class TestParseArgs(unittest.TestCase):
     def test_defaults(self):
         args = parse_args(["--port", "9876"])
         self.assertEqual(args.port, 9876)
-        self.assertEqual(args.host, "127.0.0.1")
         self.assertAlmostEqual(args.interval, 0.5)
         self.assertEqual(args.top_n, 20)
 
@@ -230,8 +229,6 @@ class TestParseArgs(unittest.TestCase):
             [
                 "--port",
                 "1234",
-                "--host",
-                "0.0.0.0",
                 "--interval",
                 "1.0",
                 "--top-n",
@@ -239,7 +236,6 @@ class TestParseArgs(unittest.TestCase):
             ]
         )
         self.assertEqual(args.port, 1234)
-        self.assertEqual(args.host, "0.0.0.0")
         self.assertAlmostEqual(args.interval, 1.0)
         self.assertEqual(args.top_n, 10)
 
@@ -263,7 +259,6 @@ class TestRunSocketReaderMocked(unittest.TestCase):
     def _make_args(self, **kwargs):
         base = types.SimpleNamespace(
             port=9999,
-            host="127.0.0.1",
             interval=0.0,  # no sleep between polls in tests
             top_n=5,
         )

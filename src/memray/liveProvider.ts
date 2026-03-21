@@ -228,7 +228,6 @@ export async function startLiveSession(
   const bridgeArgs = [
     BRIDGE_SCRIPT,
     '--port', String(port),
-    '--host', '127.0.0.1',
     '--interval', String(opts.intervalSeconds ?? 0.5),
     '--top-n', String(opts.topN ?? 20),
   ];
@@ -263,10 +262,10 @@ export async function startLiveSession(
     try { bridgeProc.kill('SIGTERM'); } catch { /* ignore */ }
   };
 
-  let processesExited = 0;
+  let targetExited = false;
+  let bridgeExited = false;
   const onProcessExit = () => {
-    processesExited += 1;
-    if (processesExited >= 2) {
+    if (targetExited && bridgeExited) {
       output.appendLine('[live] Session ended.');
       emitStop();
     }
@@ -288,11 +287,13 @@ export async function startLiveSession(
     output.appendLine(`[live] Target exited with code ${code}`);
     // When the target finishes, stop the bridge too
     try { bridgeProc.kill('SIGTERM'); } catch { /* ignore */ }
+    targetExited = true;
     onProcessExit();
   });
 
   bridgeProc.on('close', (code: number | null) => {
     output.appendLine(`[live] Bridge exited with code ${code}`);
+    bridgeExited = true;
     onProcessExit();
   });
 

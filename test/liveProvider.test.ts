@@ -18,15 +18,11 @@ import {
   __resetLiveProviderDepsForTests,
   LiveSnapshot,
 } from '../src/memray/liveProvider';
+import { FakeOutput } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-class FakeOutput {
-  lines: string[] = [];
-  appendLine(s: string) { this.lines.push(s); }
-}
 
 /**
  * Creates a fake child process whose stdout can be manually written to and

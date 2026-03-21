@@ -12,6 +12,7 @@
 import * as path from 'path';
 import vscode from '../vscodeApi';
 import type { LiveSnapshot } from '../memray/liveProvider';
+import { asPanelResource } from './webviewUtils';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -36,15 +37,6 @@ export interface LiveWebviewPanel {
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
-
-function asPanelResource(panel: vscode.WebviewPanel, filePath: string): string {
-  const fileUri = vscode.Uri.file(filePath);
-  const webview = panel.webview as vscode.Webview & { asWebviewUri?: (uri: vscode.Uri) => vscode.Uri };
-  if (typeof webview.asWebviewUri === 'function') {
-    return webview.asWebviewUri(fileUri).toString();
-  }
-  return fileUri.fsPath;
-}
 
 export function openLiveWebviewPanel(opts: LiveWebviewOptions): LiveWebviewPanel {
   const title = opts.title ?? 'Memray Live';
@@ -72,6 +64,7 @@ export function openLiveWebviewPanel(opts: LiveWebviewOptions): LiveWebviewPanel
   // Handle messages from the Webview
   const webviewWithHandler = panel.webview as vscode.Webview & {
     onDidReceiveMessage?: (handler: (message: unknown) => void) => void;
+    postMessage?: (message: unknown) => Thenable<boolean>;
   };
 
   if (typeof webviewWithHandler.onDidReceiveMessage === 'function') {
@@ -87,10 +80,10 @@ export function openLiveWebviewPanel(opts: LiveWebviewOptions): LiveWebviewPanel
 
   return {
     postSnapshot(snapshot: LiveSnapshot): void {
-      void (panel.webview as any).postMessage({ type: 'snapshot', data: snapshot });
+      void webviewWithHandler.postMessage?.({ type: 'snapshot', data: snapshot });
     },
     markStopped(): void {
-      void (panel.webview as any).postMessage({ type: 'stopped' });
+      void webviewWithHandler.postMessage?.({ type: 'stopped' });
     },
     dispose(): void {
       panel.dispose();

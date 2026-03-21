@@ -64,11 +64,6 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="TCP port where `memray run --live-remote` is listening.",
     )
     parser.add_argument(
-        "--host",
-        default="127.0.0.1",
-        help="Host to connect to (currently unused; SocketReader always uses 127.0.0.1).",
-    )
-    parser.add_argument(
         "--interval",
         type=float,
         default=0.5,
