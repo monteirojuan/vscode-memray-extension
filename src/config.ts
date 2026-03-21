@@ -6,6 +6,7 @@ export interface MemrayConfig {
   outputDirectory: string;
   keepHistoryDays: number;
   timeoutSeconds: number;
+  liveUpdateIntervalSeconds: number;
 }
 
 export function getConfig(): MemrayConfig {
@@ -16,6 +17,7 @@ export function getConfig(): MemrayConfig {
     outputDirectory: cfg.get<string>('outputDirectory', '.memray'),
     keepHistoryDays: cfg.get<number>('keepHistoryDays', 30),
     timeoutSeconds: cfg.get<number>('timeoutSeconds', 0),
+    liveUpdateIntervalSeconds: cfg.get<number>('liveUpdateIntervalSeconds', 0.5),
   };
 }
 

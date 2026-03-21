@@ -6,6 +6,8 @@ import { readFlamegraphData } from './memray/flamegraphModel';
 import { readStatsSummaryFromFile } from './memray/stats';
 import { createMemrayOutputDir } from './utils/pathResolver';
 import { openNativeFlamegraphPanel } from './views/flamegraphWebview';
+import { openLiveWebviewPanel } from './views/liveWebview';
+import { startLiveSession } from './memray/liveProvider';
 import { getConfig } from './config';
 
 interface ResultEntry {
@@ -372,6 +374,80 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(disposable);
+
+  // ---------------------------------------------------------------------------
+  // memray.runLive — Live profiling mode
+  // ---------------------------------------------------------------------------
+  const runLiveCmd = vscode.commands.registerCommand('memray.runLive', async (uri?: vscode.Uri) => {
+    try {
+      const editor = vscode.window.activeTextEditor;
+      const fileUri = uri || editor?.document.uri;
+      if (!fileUri) {
+        vscode.window.showWarningMessage('No file selected. Open a Python file or pass a file URI.');
+        return;
+      }
+
+      const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+      if (!ws) {
+        vscode.window.showWarningMessage('Open a workspace folder before using Live Mode.');
+        return;
+      }
+
+      const scriptPath = fileUri.fsPath;
+      const conf = getConfig();
+
+      // Open the Webview first so the user sees it immediately
+      const webviewPanel = openLiveWebviewPanel({
+        extensionPath: context.extensionPath,
+        title: `Live: ${path.basename(scriptPath)}`,
+        onStop: () => {
+          session?.stop();
+        },
+        onOpenSource: async (sourcePath, line) => {
+          await openSourceLocation(ws.uri.fsPath, scriptPath, sourcePath, line, output);
+        },
+      });
+
+      let session: Awaited<ReturnType<typeof startLiveSession>> | undefined;
+
+      try {
+        session = await startLiveSession(
+          {
+            scriptPath,
+            intervalSeconds: conf.liveUpdateIntervalSeconds,
+            topN: 20,
+            pythonPath: conf.pythonPath.trim() || undefined,
+          },
+          output,
+        );
+      } catch (err: unknown) {
+        webviewPanel.dispose();
+        const message = err instanceof Error ? err.message : String(err);
+        output.appendLine(`[live] Failed to start session: ${message}`);
+        vscode.window.showErrorMessage(`Memray Live: ${message}`);
+        return;
+      }
+
+      // Forward snapshots to the Webview
+      session.onSnapshot(snap => webviewPanel.postSnapshot(snap));
+
+      session.onError(err => {
+        output.appendLine(`[live] Session error: ${err.message}`);
+        vscode.window.showErrorMessage(`Memray Live error: ${err.message}`);
+      });
+
+      session.onStop(() => {
+        webviewPanel.markStopped();
+        output.appendLine('[live] Session stopped.');
+      });
+
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      output.appendLine(`[live] Unexpected error: ${message}`);
+      vscode.window.showErrorMessage(`Memray Live: ${message}`);
+    }
+  });
+  context.subscriptions.push(runLiveCmd);
 }
 
 class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
