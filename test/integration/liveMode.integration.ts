@@ -79,7 +79,7 @@ describe('integration: live mode — command registration', function () {
 
 describe('integration: live mode — splitJsonLines', function () {
   it('reassembles a snapshot split across three chunks', () => {
-    const line = JSON.stringify({ ts: 1, rss: 512, heap: 512, peak: 1024, top: [] });
+    const line = JSON.stringify({ ts: 1, heap: 512, peak: 1024, top: [] });
     const third = Math.floor(line.length / 3);
 
     let buf = '';
@@ -112,7 +112,7 @@ describe('integration: live mode — splitJsonLines', function () {
 
   it('handles a burst of 50 snapshots in a single chunk', () => {
     const lines = Array.from({ length: 50 }, (_, i) =>
-      JSON.stringify({ ts: i, rss: i * 100, heap: i * 100, peak: i * 200, top: [] }),
+      JSON.stringify({ ts: i, heap: i * 100, peak: i * 200, top: [] }),
     ).join('\n') + '\n';
 
     const { lines: parsed } = splitJsonLines(lines);

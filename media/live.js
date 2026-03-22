@@ -27,7 +27,6 @@
   // DOM references
   // ---------------------------------------------------------------------------
 
-  const statRss    = document.getElementById('stat-rss');
   const statHeap   = document.getElementById('stat-heap');
   const statPeak   = document.getElementById('stat-peak');
   const tableBody  = document.getElementById('topTableBody');
@@ -60,7 +59,7 @@
       return;
     }
 
-    const maxVal = Math.max(...chartData.map(d => d.rss), 1);
+    const maxVal = Math.max(...chartData.map(d => d.heap), 1);
     const pad    = { top: 10, right: 8, bottom: 24, left: 60 };
     const cW     = W - pad.left - pad.right;
     const cH     = H - pad.top  - pad.bottom;
@@ -91,7 +90,7 @@
     ctx.beginPath();
     chartData.forEach((d, i) => {
       const x = pad.left + (i / (chartData.length - 1)) * cW;
-      const y = pad.top  + (1 - d.rss / maxVal) * cH;
+      const y = pad.top  + (1 - d.heap / maxVal) * cH;
       if (i === 0) ctx.moveTo(x, y);
       else         ctx.lineTo(x, y);
     });
@@ -105,7 +104,7 @@
     ctx.beginPath();
     chartData.forEach((d, i) => {
       const x = pad.left + (i / (chartData.length - 1)) * cW;
-      const y = pad.top  + (1 - d.rss / maxVal) * cH;
+      const y = pad.top  + (1 - d.heap / maxVal) * cH;
       if (i === 0) ctx.moveTo(x, y);
       else         ctx.lineTo(x, y);
     });
@@ -205,12 +204,11 @@
     snapshotCount += 1;
 
     // Header stats
-    statRss.textContent  = `RSS: ${formatBytes(data.rss)}`;
     statHeap.textContent = `Heap: ${formatBytes(data.heap)}`;
     statPeak.textContent = `Peak: ${formatBytes(data.peak)}`;
 
     // Chart
-    chartData.push({ ts: data.ts, rss: data.rss });
+    chartData.push({ ts: data.ts, heap: data.heap });
     if (chartData.length > MAX_POINTS) chartData.shift();
     drawChart();
 

@@ -124,10 +124,9 @@ function buildHtml(opts: HtmlOptions): string {
     <div class="live-header">
       <h2 class="live-title">${opts.title}</h2>
       <div class="live-stats">
-        <span class="stat-badge" id="stat-rss">RSS: --</span>
-        <span class="stat-badge" id="stat-heap">Heap: --</span>
-        <span class="stat-badge peak" id="stat-peak">Peak: --</span>
-      </div>
+          <span class="stat-badge" id="stat-heap">Heap: --</span>
+          <span class="stat-badge peak" id="stat-peak">Peak: --</span>
+        </div>
       <button id="btn-stop" class="btn-stop">Stop</button>
     </div>
 

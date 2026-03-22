@@ -12,8 +12,7 @@
  * JSON snapshot schema (one object per line from bridge stdout):
  * {
  *   ts:    number   — Unix timestamp in ms
- *   rss:   number   — current live bytes
- *   heap:  number   — current heap bytes
+ *   heap:  number   — current live heap bytes (tracked by memray allocator hooks)
  *   peak:  number   — session high watermark in bytes
  *   top:   Array<{ func: string; file: string; line: number; mem: number; allocs: number }>
  * }
@@ -33,7 +32,6 @@ import { detectMemrayPython } from '../utils/memrayPython';
 
 export interface LiveSnapshot {
   ts: number;
-  rss: number;
   heap: number;
   peak: number;
   top: Array<{
@@ -128,7 +126,6 @@ export function parseSnapshot(line: string): LiveSnapshot | null {
     const obj = JSON.parse(line) as Record<string, unknown>;
     if (
       typeof obj.ts !== 'number' ||
-      typeof obj.rss !== 'number' ||
       typeof obj.heap !== 'number' ||
       typeof obj.peak !== 'number' ||
       !Array.isArray(obj.top)

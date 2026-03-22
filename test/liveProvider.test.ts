@@ -109,7 +109,7 @@ describe('liveProvider.splitJsonLines', () => {
 
 describe('liveProvider.parseSnapshot', () => {
   const validSnap = JSON.stringify({
-    ts: 1000, rss: 2048, heap: 2048, peak: 4096,
+    ts: 1000, heap: 2048, peak: 4096,
     top: [{ func: 'main', file: 'a.py', line: 1, mem: 512, allocs: 3 }],
   });
 
@@ -117,7 +117,7 @@ describe('liveProvider.parseSnapshot', () => {
     const snap = parseSnapshot(validSnap);
     assert.ok(snap !== null);
     assert.strictEqual(snap!.ts, 1000);
-    assert.strictEqual(snap!.rss, 2048);
+    assert.strictEqual(snap!.heap, 2048);
     assert.strictEqual(snap!.peak, 4096);
     assert.strictEqual(snap!.top.length, 1);
     assert.strictEqual(snap!.top[0].func, 'main');
@@ -128,17 +128,17 @@ describe('liveProvider.parseSnapshot', () => {
   });
 
   it('returns null when ts is missing', () => {
-    const bad = JSON.stringify({ rss: 0, heap: 0, peak: 0, top: [] });
+    const bad = JSON.stringify({ heap: 0, peak: 0, top: [] });
     assert.strictEqual(parseSnapshot(bad), null);
   });
 
   it('returns null when top is not an array', () => {
-    const bad = JSON.stringify({ ts: 1, rss: 0, heap: 0, peak: 0, top: null });
+    const bad = JSON.stringify({ ts: 1, heap: 0, peak: 0, top: null });
     assert.strictEqual(parseSnapshot(bad), null);
   });
 
-  it('returns null when rss is a string', () => {
-    const bad = JSON.stringify({ ts: 1, rss: 'big', heap: 0, peak: 0, top: [] });
+  it('returns null when heap is a string', () => {
+    const bad = JSON.stringify({ ts: 1, heap: 'big', peak: 0, top: [] });
     assert.strictEqual(parseSnapshot(bad), null);
   });
 
@@ -147,7 +147,7 @@ describe('liveProvider.parseSnapshot', () => {
   });
 
   it('accepts a snapshot with empty top array', () => {
-    const snap = parseSnapshot(JSON.stringify({ ts: 0, rss: 0, heap: 0, peak: 0, top: [] }));
+    const snap = parseSnapshot(JSON.stringify({ ts: 0, heap: 0, peak: 0, top: [] }));
     assert.ok(snap !== null);
     assert.deepStrictEqual(snap!.top, []);
   });
@@ -183,7 +183,7 @@ describe('liveProvider.startLiveSession', () => {
     __setLiveProviderDepsForTests(makeMockDeps(target, bridge) as any);
 
     const out = new FakeOutput();
-    const snapLine = JSON.stringify({ ts: 1, rss: 512, heap: 512, peak: 1024, top: [] }) + '\n';
+    const snapLine = JSON.stringify({ ts: 1, heap: 512, peak: 1024, top: [] }) + '\n';
 
     startLiveSession({ scriptPath: 'script.py' }, out as any).then(session => {
       session.onSnapshot(snap => {
@@ -206,7 +206,7 @@ describe('liveProvider.startLiveSession', () => {
     __setLiveProviderDepsForTests(makeMockDeps(target, bridge) as any);
 
     const out = new FakeOutput();
-    const fullLine = JSON.stringify({ ts: 42, rss: 100, heap: 100, peak: 200, top: [] });
+    const fullLine = JSON.stringify({ ts: 42, heap: 100, peak: 200, top: [] });
 
     const received: LiveSnapshot[] = [];
 
@@ -347,7 +347,7 @@ describe('liveProvider.startLiveSession', () => {
     __setLiveProviderDepsForTests(makeMockDeps(target, bridge) as any);
 
     const out = new FakeOutput();
-    const validLine = JSON.stringify({ ts: 5, rss: 0, heap: 0, peak: 0, top: [] }) + '\n';
+    const validLine = JSON.stringify({ ts: 5, heap: 0, peak: 0, top: [] }) + '\n';
 
     const received: LiveSnapshot[] = [];
 
@@ -380,7 +380,7 @@ describe('liveProvider.startLiveSession', () => {
       session.onSnapshot(snap => received.push(snap.ts));
 
       for (let i = 1; i <= 5; i++) {
-        bridge._writeStdout(JSON.stringify({ ts: i, rss: 0, heap: 0, peak: 0, top: [] }) + '\n');
+        bridge._writeStdout(JSON.stringify({ ts: i, heap: 0, peak: 0, top: [] }) + '\n');
       }
 
       setImmediate(() => {
