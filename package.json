@@ -15,7 +15,7 @@
     "build": "webpack --mode production",
     "watch": "webpack --watch --mode development",
     "compile": "tsc -p tsconfig.json",
-    "compile:tests": "tsc -p tsconfig.integration.json && node -e \"require('fs').writeFileSync('dist/test/integration/package.json', JSON.stringify({type:'commonjs'}))\"",
+    "compile:tests": "tsc -p tsconfig.integration.json && node -e \"const fs=require('fs'),path=require('path'),dir='dist/test/integration';fs.readdirSync(dir).filter(f=>f.endsWith('.integration.js')).forEach(f=>{fs.renameSync(path.join(dir,f),path.join(dir,f.replace(/\\.js$/,'.mjs')))});\"",
     "lint": "eslint --ext .ts src",
     "test": "node --import tsx ./node_modules/mocha/bin/mocha --extension ts \"test/**/*.test.ts\" --exit",
     "pretest:integration": "npm run build && npm run compile:tests",

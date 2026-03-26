@@ -25,6 +25,7 @@ import { fileURLToPath } from 'url';
 import type * as VSCode from 'vscode';
 import detection from '../utils/pythonDetection';
 import { detectMemrayPython } from '../utils/memrayPython';
+import { splitJsonLines, parseSnapshot } from './liveUtils';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -107,36 +108,8 @@ export function findFreePort(): Promise<number> {
   });
 }
 
-/**
- * Splits a potentially chunked stdout buffer into complete JSON lines.
- * Returns { lines, remainder } where remainder is any incomplete trailing data.
- */
-export function splitJsonLines(buffer: string): { lines: string[]; remainder: string } {
-  const parts = buffer.split('\n');
-  const remainder = parts.pop() ?? '';
-  const lines = parts.filter(l => l.trim().length > 0);
-  return { lines, remainder };
-}
-
-/**
- * Safely parse a JSON line into a LiveSnapshot. Returns null on failure.
- */
-export function parseSnapshot(line: string): LiveSnapshot | null {
-  try {
-    const obj = JSON.parse(line) as Record<string, unknown>;
-    if (
-      typeof obj.ts !== 'number' ||
-      typeof obj.heap !== 'number' ||
-      typeof obj.peak !== 'number' ||
-      !Array.isArray(obj.top)
-    ) {
-      return null;
-    }
-    return obj as unknown as LiveSnapshot;
-  } catch {
-    return null;
-  }
-}
+// Re-export utility functions from liveUtils
+export { splitJsonLines, parseSnapshot } from './liveUtils';
 
 // ---------------------------------------------------------------------------
 // Default deps (production)

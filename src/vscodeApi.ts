@@ -139,4 +139,5 @@ export function __resetVscodeForTests(): void {
 	resolvedVscode = defaultVscode;
 }
 
+export type { VscodeModule };
 export { resolvedVscode as default };

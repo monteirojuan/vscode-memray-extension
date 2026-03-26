@@ -18,7 +18,11 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as childProcess from 'child_process';
 import * as vscode from 'vscode';
-import { splitJsonLines, parseSnapshot } from '../../src/memray/liveProvider';
+import { fileURLToPath } from 'url';
+import { splitJsonLines, parseSnapshot } from '../../src/memray/liveUtils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const EXTENSION_ID = 'JuanMonteiro.memray-profiler';
 const SCRIPTS_DIR = path.resolve(__dirname, '../../../scripts');

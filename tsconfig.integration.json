@@ -3,9 +3,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist",
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "types": ["mocha", "node"]
+    "types": ["mocha", "node", "@types/vscode"]
   },
   "include": ["test/integration/**/*.ts"],
   "exclude": ["node_modules", ".vscode-test", "dist"]
