@@ -144,28 +144,65 @@
       return sortAsc ? va - vb : vb - va;
     });
 
-    const rows = sorted.map(row => {
-      const barPct = ((row.mem / maxMemInTop) * 100).toFixed(1);
-      return `<tr>
-        <td title="${escapeHtml(row.func)}">${escapeHtml(row.func)}</td>
-        <td>
-          <span class="file-link"
-                data-file="${escapeHtml(row.file)}"
-                data-line="${row.line}"
-                title="${escapeHtml(row.file)}:${row.line}">
-            ${escapeHtml(shortenPath(row.file))}
-          </span>
-        </td>
-        <td>${row.line}</td>
-        <td class="mem-bar-cell">
-          <div class="mem-bar" style="width:${barPct}%"></div>
-          ${escapeHtml(formatBytes(row.mem))}
-        </td>
-        <td>${row.allocs.toLocaleString()}</td>
-      </tr>`;
-    }).join('');
+    tableBody.replaceChildren();
 
-    tableBody.innerHTML = rows || '<tr><td colspan="5" class="empty-row">No allocations tracked yet.</td></tr>';
+    if (sorted.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 5;
+      td.className = 'empty-row';
+      td.textContent = 'No allocations tracked yet.';
+      tr.appendChild(td);
+      tableBody.appendChild(tr);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    sorted.forEach(row => {
+      const mem = Number(row.mem);
+      const line = Number.isFinite(row.line) ? row.line : (parseInt(String(row.line), 10) || 1);
+      const file = String(row.file || '');
+      const func = String(row.func || '');
+      const barPct = Math.max(0, Math.min(100, (mem / maxMemInTop) * 100));
+
+      const tr = document.createElement('tr');
+
+      const tdFunc = document.createElement('td');
+      tdFunc.title = func;
+      tdFunc.textContent = func;
+      tr.appendChild(tdFunc);
+
+      const tdFile = document.createElement('td');
+      const fileLink = document.createElement('span');
+      fileLink.className = 'file-link';
+      fileLink.dataset.file = file;
+      fileLink.dataset.line = String(line);
+      fileLink.title = `${file}:${line}`;
+      fileLink.textContent = shortenPath(file);
+      tdFile.appendChild(fileLink);
+      tr.appendChild(tdFile);
+
+      const tdLine = document.createElement('td');
+      tdLine.textContent = String(line);
+      tr.appendChild(tdLine);
+
+      const tdMem = document.createElement('td');
+      tdMem.className = 'mem-bar-cell';
+      const memBar = document.createElement('div');
+      memBar.className = 'mem-bar';
+      memBar.style.width = `${barPct.toFixed(1)}%`;
+      tdMem.appendChild(memBar);
+      tdMem.appendChild(document.createTextNode(formatBytes(mem)));
+      tr.appendChild(tdMem);
+
+      const tdAllocs = document.createElement('td');
+      tdAllocs.textContent = Number(row.allocs).toLocaleString();
+      tr.appendChild(tdAllocs);
+
+      fragment.appendChild(tr);
+    });
+
+    tableBody.appendChild(fragment);
 
     // Re-attach click listeners for file links
     tableBody.querySelectorAll('.file-link').forEach(el => {
@@ -263,14 +300,6 @@
   function shortenPath(p) {
     const parts = p.replace(/\\/g, '/').split('/');
     return parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : p;
-  }
-
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
   }
 
   // Redraw chart on resize
