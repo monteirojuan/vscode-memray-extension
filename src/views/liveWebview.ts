@@ -3,8 +3,8 @@
  *
  * Receives LiveSnapshot objects via postMessage() from the extension host
  * and renders:
- *   - A header showing current RSS, heap, and session peak (high watermark).
- *   - A time-series chart (Chart.js) of memory usage over time.
+ *   - A header showing current heap usage and session peak (high watermark).
+ *   - A time-series chart (custom canvas, no external library) of heap usage over time.
  *   - A live table of top allocators, sortable by memory usage.
  *   - A "Stop" button that posts a message back to the extension host.
  */

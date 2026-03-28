@@ -403,12 +403,23 @@ export async function activate(context: vscode.ExtensionContext) {
       const { dir: outDir, id } = await createMemrayOutputDir(ws.uri.fsPath);
       output.appendLine(`[live] Output directory: ${outDir} (id: ${id})`);
 
-      // Open the Webview first so the user sees it immediately
+      // Open the Webview first so the user sees it immediately.
+      // NOTE: `session` is assigned only after startLiveSession resolves (async).
+      // We use a `stopRequested` flag to capture any Stop click that arrives
+      // during that window; if it fires we honour it as soon as session exists.
+      let stopRequested = false;
+      let session: Awaited<ReturnType<typeof startLiveSession>> | undefined;
+
       const webviewPanel = openLiveWebviewPanel({
         extensionPath: context.extensionPath,
         title: `Live: ${path.basename(scriptPath)}`,
         onStop: () => {
-          session?.stop();
+          if (session) {
+            session.stop();
+          } else {
+            // Session is still starting — record the intent and apply it after.
+            stopRequested = true;
+          }
         },
         onOpenSource: async (sourcePath, line) => {
           await openSourceLocation(ws.uri.fsPath, scriptPath, sourcePath, line, output);
@@ -416,7 +427,6 @@ export async function activate(context: vscode.ExtensionContext) {
       });
 
       const binPath = path.join(outDir, `${id}.bin`);
-      let session: Awaited<ReturnType<typeof startLiveSession>> | undefined;
 
       try {
         session = await startLiveSession(
@@ -434,6 +444,14 @@ export async function activate(context: vscode.ExtensionContext) {
         const message = err instanceof Error ? err.message : String(err);
         output.appendLine(`[live] Failed to start session: ${message}`);
         vscode.window.showErrorMessage(`Memray Live: ${message}`);
+        return;
+      }
+
+      // If the user clicked Stop while the session was starting, honour it now.
+      if (stopRequested) {
+        output.appendLine('[live] Stop was requested before session started — stopping now.');
+        session.stop();
+        webviewPanel.markStopped();
         return;
       }
 

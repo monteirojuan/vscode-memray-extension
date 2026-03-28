@@ -15,6 +15,7 @@ JSON schema emitted to stdout (one compact object per line):
   {
     "ts":    <int>   — Unix timestamp in milliseconds
     "heap":  <int>   — total live heap bytes (sum of high-watermark record sizes)
+    "rss":   <int>   — alias for heap (retained for compatibility; rss == heap)
     "peak":  <int>   — high watermark across the whole session (bytes)
     "top":   [       — top N allocator frames by current live bytes
       {
@@ -144,6 +145,7 @@ def build_snapshot(heap_bytes: int, peak_bytes: int, top: list) -> dict:
     return {
         "ts": int(time.time() * 1000),
         "heap": heap_bytes,
+        "rss": heap_bytes,  # alias for heap; kept for schema compatibility
         "peak": peak_bytes,
         "top": top,
     }

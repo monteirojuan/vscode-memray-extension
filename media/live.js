@@ -39,7 +39,7 @@
   // ---------------------------------------------------------------------------
 
   const MAX_POINTS = 120; // ~60 seconds at 500 ms interval
-  const chartData  = [];  // { ts, rss } points
+  const chartData  = [];  // { ts, heap } points
 
   const ctx = canvas.getContext('2d');
 

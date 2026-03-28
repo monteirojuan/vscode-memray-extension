@@ -8,11 +8,11 @@ export interface LiveSnapshot {
   heap: number;
   peak: number;
   top: Array<{
-    function: string;
+    func: string;
     file: string;
     line: number;
-    size: number;
-    count: number;
+    mem: number;
+    allocs: number;
   }>;
 }
 

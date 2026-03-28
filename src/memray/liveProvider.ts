@@ -2,9 +2,9 @@
  * liveProvider.ts — Orchestrates the Live Mode session for the VS Code Memray extension.
  *
  * Responsibilities:
- *  1. Reserve a free ephemeral TCP port.
- *  2. Spawn the target Python script under `memray run --live-remote --live-port <PORT>`.
- *  3. Spawn the bridge middleware (scripts/memray_bridge.py) once the target is ready.
+ *  1. Detect memray and a memray-capable Python interpreter.
+ *  2. Spawn the target Python script under `memray run --output <binPath> --no-compress --force`.
+ *  3. Spawn the bridge middleware (scripts/memray_bridge.py) to poll the .bin file via FileReader.
  *  4. Parse newline-delimited JSON snapshots emitted by the bridge on stdout.
  *  5. Forward each parsed snapshot to registered listeners (e.g., the Webview).
  *  6. Tear down both child processes gracefully when the session ends.
@@ -13,6 +13,7 @@
  * {
  *   ts:    number   — Unix timestamp in ms
  *   heap:  number   — current live heap bytes (tracked by memray allocator hooks)
+ *   rss:   number   — alias for heap (emitted by bridge for compatibility; not used by TS consumers)
  *   peak:  number   — session high watermark in bytes
  *   top:   Array<{ func: string; file: string; line: number; mem: number; allocs: number }>
  * }
@@ -142,8 +143,8 @@ export function __resetLiveProviderDepsForTests(): void {
  * Flow:
  *   1. Detect memray command + memray-capable Python.
  *   2. Reserve a free port.
- *   3. Launch: `memray run --live-remote --live-port <PORT> -- <scriptPath>`
- *   4. Launch: `python memray_bridge.py --port <PORT> [...]`
+ *   3. Launch: `memray run --output <binPath> --no-compress --force -- <scriptPath>`
+ *   4. Launch: `python memray_bridge.py --bin-path <binPath> [--interval ...] [--top-n ...]`
  *   5. Pipe bridge stdout → parse JSON → notify listeners.
  *   6. Both processes are killed when stop() is called or the target exits.
  */
