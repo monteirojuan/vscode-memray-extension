@@ -111,6 +111,13 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+*.kate-swp
+
+# Python
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
 
 # Memray output – anchor to workspace root so test fixtures are still tracked
 /.memray/
