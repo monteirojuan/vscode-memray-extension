@@ -1,28 +1,36 @@
-[![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/JuanMonteiro.memray-profiler?style=plastic&label=VS%20Code%20Installs)
-](https://marketplace.visualstudio.com/items?itemName=JuanMonteiro.memray-profiler)
-[![Open VSX Downloads](https://img.shields.io/open-vsx/dt/JuanMonteiro/memray-profiler?style=plastic&label=Open%20VSX%20Downloads)
-](https://open-vsx.org/extension/JuanMonteiro/memray-profiler)
-
 # Memray Profiler for VS Code
 
-A VS Code extension for memory profiling Python applications using memray.
+[![Marketplace](https://img.shields.io/visual-studio-marketplace/i/JuanMonteiro.memray-profiler?style=flat-square&label=VS%20Code)](https://marketplace.visualstudio.com/items?itemName=JuanMonteiro.memray-profiler)
+[![Open VSX](https://img.shields.io/open-vsx/dt/JuanMonteiro/memray-profiler?style=flat-square&label=Open%20VSX)](https://open-vsx.org/extension/JuanMonteiro/memray-profiler)
 
-## Overview
+Visualize alocações de memória, encontre leaks e otimize seu código Python usando [memray](https://github.com/bloomberg/memray) diretamente no VS Code.
 
-This extension provides an easy way to profile Python memory usage directly from VS Code, visualize results with interactive flamegraphs, and track profiling history.
+> **Nota:** Memray suporta apenas **Linux** e **macOS**.
 
-## Features
+## ✨ Destaques
 
-- One-click memory profiling for Python files
-- Interactive flamegraph visualization
-- Result history and management
-- Direct navigation to source code from profiling results
-- Automatic Python detection
-- Configurable profiling options
+- **Um Clique:** Clique com o botão direito em um arquivo `.py` para iniciar o profiling.
+- **Live Mode:** Gráficos de memória em tempo real e tabela dos maiores alocadores.
+- **Flamegraphs Interativos:** Navegação visual com pulo direto para a linha do código-fonte.
+- **Suporte Nativo:** Rastreia extensões C/C++ (NumPy, Pandas, PyTorch, etc).
+- **Histórico:** Gerencie resultados anteriores através da barra lateral dedicada.
 
-## Requirements
+## 🛠️ Requisitos
 
-- VS Code 1.75 or later
-- Python 3.8+
-- memray 1.3.0+
+- **OS:** Linux ou macOS.
+- **Python:** 3.8+.
+- **Memray:** `pip install memray` (recomendado no ambiente do projeto para habilitar o modo interativo).
+
+## ⚙️ Configurações Principais
+
+| Configuração | Descrição |
+|--------------|-----------|
+| `memray.nativeTracing` | Ativa rastreio de alocações C/C++. |
+| `memray.outputDirectory` | Pasta onde os arquivos `.bin` serão salvos (padrão `.memray`). |
+| `memray.liveUpdateIntervalSeconds` | Frequência de atualização do modo Live. |
+
+---
+
+Para detalhes sobre o design técnico, consulte o [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 
