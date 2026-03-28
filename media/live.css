@@ -1,0 +1,257 @@
+/* live.css — Styles for the Memray Live Mode Webview */
+
+:root {
+  --bg: var(--vscode-editor-background, #1e1e1e);
+  --fg: var(--vscode-editor-foreground, #d4d4d4);
+  --border: var(--vscode-panel-border, #3c3c3c);
+  --header-bg: var(--vscode-sideBar-background, #252526);
+  --btn-bg: var(--vscode-button-background, #0e639c);
+  --btn-fg: var(--vscode-button-foreground, #ffffff);
+  --btn-hover: var(--vscode-button-hoverBackground, #1177bb);
+  --badge-bg: var(--vscode-badge-background, #4d4d4d);
+  --badge-fg: var(--vscode-badge-foreground, #ffffff);
+  --peak-color: #f14c4c;
+  --row-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+  --row-alt: var(--vscode-list-inactiveSelectionBackground, #37373d);
+  --link-color: var(--vscode-textLink-foreground, #4ec9b0);
+  --font: var(--vscode-font-family, 'Segoe UI', sans-serif);
+  --mono: var(--vscode-editor-font-family, 'Cascadia Code', monospace);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-y: auto;
+}
+
+/* ── Layout ─────────────────────────────────────── */
+
+.live-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 8px 12px;
+  gap: 10px;
+}
+
+/* ── Header ─────────────────────────────────────── */
+
+.live-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--header-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  flex-shrink: 0;
+}
+
+.live-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.live-stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.stat-badge {
+  display: inline-block;
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.stat-badge.peak {
+  background: var(--peak-color);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Stop button ─────────────────────────────────── */
+
+.btn-stop {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: none;
+  border-radius: 3px;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.btn-stop:hover:not(:disabled) {
+  background: var(--btn-hover);
+}
+
+.btn-stop:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Chart ───────────────────────────────────────── */
+
+.live-chart-container {
+  background: var(--header-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  flex-shrink: 0;
+  height: 180px;
+  position: relative;
+}
+
+#memChart {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Table ───────────────────────────────────────── */
+
+.live-table-container {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+#topTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+#topTable thead {
+  position: sticky;
+  top: 0;
+  background: var(--header-bg);
+  z-index: 1;
+}
+
+#topTable th {
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+  cursor: pointer;
+}
+
+#topTable th:hover {
+  background: var(--row-hover);
+}
+
+#topTable th:nth-child(1) { width: 30%; }
+#topTable th:nth-child(2) { width: 35%; }
+#topTable th:nth-child(3) { width: 8%; }
+#topTable th:nth-child(4) { width: 15%; }
+#topTable th:nth-child(5) { width: 12%; }
+
+#topTable tbody tr {
+  transition: background 0.1s;
+}
+
+#topTable tbody tr:hover {
+  background: var(--row-hover);
+}
+
+#topTable tbody tr:nth-child(even) {
+  background: var(--row-alt);
+}
+
+#topTable tbody tr:nth-child(even):hover {
+  background: var(--row-hover);
+}
+
+#topTable td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.empty-row {
+  text-align: center;
+  color: var(--vscode-disabledForeground, #6e6e6e);
+  font-style: italic;
+  font-family: var(--font) !important;
+  padding: 20px !important;
+}
+
+.file-link {
+  color: var(--link-color);
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.file-link:hover {
+  text-decoration: underline;
+}
+
+.mem-bar-cell {
+  position: relative;
+}
+
+.mem-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(14, 99, 156, 0.25);
+  pointer-events: none;
+}
+
+/* ── Status bar ──────────────────────────────────── */
+
+.status-bar {
+  font-size: 11px;
+  color: var(--vscode-disabledForeground, #6e6e6e);
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+.status-bar.stopped {
+  color: var(--peak-color);
+  font-weight: 600;
+}
+
+/* ── Animations ──────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.live-header,
+.live-chart-container,
+.live-table-container {
+  animation: fadeIn 0.25s ease;
+}

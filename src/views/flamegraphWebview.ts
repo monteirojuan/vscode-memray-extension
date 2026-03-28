@@ -1,15 +1,7 @@
 import * as path from 'path';
 import vscode from '../vscodeApi';
 import type { FlamegraphData, FlamegraphNode } from '../memray/flamegraphModel';
-
-function asPanelResource(panel: vscode.WebviewPanel, filePath: string): string {
-  const fileUri = vscode.Uri.file(filePath);
-  const webview = panel.webview as vscode.Webview & { asWebviewUri?: (uri: vscode.Uri) => vscode.Uri };
-  if (typeof webview.asWebviewUri === 'function') {
-    return webview.asWebviewUri(fileUri).toString();
-  }
-  return fileUri.fsPath;
-}
+import { asPanelResource } from './webviewUtils';
 
 function toD3Node(node: FlamegraphNode): unknown {
   const frameText = [node.function, node.file ? `${node.file}:${node.line}` : '']

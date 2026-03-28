@@ -13,7 +13,7 @@ async function collectIntegrationFiles(dirPath) {
       files.push(...await collectIntegrationFiles(fullPath));
       continue;
     }
-    if (entry.isFile() && entry.name.endsWith('.integration.js')) {
+    if (entry.isFile() && entry.name.endsWith('.integration.mjs')) {
       files.push(fullPath);
     }
   }
@@ -57,14 +57,17 @@ async function run() {
   const testFiles = await collectIntegrationFiles(compiledTestsRoot);
 
   if (testFiles.length === 0) {
-    throw new Error(`No compiled integration tests were found in ${compiledTestsRoot}`);
+    throw new Error(`No compiled integration tests (.mjs) were found in ${compiledTestsRoot}`);
   }
+
+  // Set up Mocha BDD globals (describe, it, before, etc.) before dynamic imports
+  // so that the ES module test files can register their suites when loaded.
+  mocha.suite.emit('pre-require', global, '', mocha);
 
   for (const file of testFiles) {
-    mocha.addFile(file);
+    const fileUrl = `file://${file.replace(/\\/g, '/')}`;
+    await import(fileUrl);
   }
-
-  await mocha.loadFilesAsync();
 
   return new Promise((resolve, reject) => {
     mocha.run(failures => {

@@ -15,7 +15,7 @@
     "build": "webpack --mode production",
     "watch": "webpack --watch --mode development",
     "compile": "tsc -p tsconfig.json",
-    "compile:tests": "tsc -p tsconfig.integration.json && node -e \"require('fs').writeFileSync('dist/test/integration/package.json', JSON.stringify({type:'commonjs'}))\"",
+    "compile:tests": "tsc -p tsconfig.integration.json && node -e \"const fs=require('fs'),path=require('path'),dir='dist/test/integration';fs.readdirSync(dir).filter(f=>f.endsWith('.integration.js')).forEach(f=>{fs.renameSync(path.join(dir,f),path.join(dir,f.replace(/\\.js$/,'.mjs')))});\"",
     "lint": "eslint --ext .ts src",
     "test": "node --import tsx ./node_modules/mocha/bin/mocha --extension ts \"test/**/*.test.ts\" --exit",
     "pretest:integration": "npm run build && npm run compile:tests",
@@ -101,6 +101,12 @@
         "title": "Refresh Results",
         "category": "Memray",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "memray.runLive",
+        "title": "Run Live Profile",
+        "category": "Memray",
+        "icon": "$(pulse)"
       }
     ],
     "viewsContainers": {
@@ -128,6 +134,10 @@
           "when": "editorLangId == python"
         },
         {
+          "command": "memray.runLive",
+          "when": "editorLangId == python"
+        },
+        {
           "command": "memray.viewFlamegraph",
           "when": "false"
         },
@@ -149,11 +159,21 @@
           "command": "memray.profileFile",
           "when": "resourceExtname == .py",
           "group": "navigation"
+        },
+        {
+          "command": "memray.runLive",
+          "when": "resourceExtname == .py",
+          "group": "navigation"
         }
       ],
       "editor/context": [
         {
           "command": "memray.profileFile",
+          "when": "editorLangId == python",
+          "group": "navigation"
+        },
+        {
+          "command": "memray.runLive",
           "when": "editorLangId == python",
           "group": "navigation"
         }
@@ -188,6 +208,11 @@
       "view/title": [
         {
           "command": "memray.profileCurrentFile",
+          "when": "view == memrayResults && memray.hasWorkspace && memray.activeEditorIsPython",
+          "group": "navigation"
+        },
+        {
+          "command": "memray.runLive",
           "when": "view == memrayResults && memray.hasWorkspace && memray.activeEditorIsPython",
           "group": "navigation"
         },
@@ -230,6 +255,11 @@
           "type": "number",
           "default": 0,
           "description": "Timeout (in seconds) for memray runs. 0 means no timeout."
+        },
+        "memray.liveUpdateIntervalSeconds": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Aggregation window (in seconds) for Live Mode snapshots. Lower values give more granularity but higher CPU usage."
         }
       }
     }

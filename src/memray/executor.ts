@@ -56,7 +56,7 @@ export interface RunResult {
   errors: string[];
 }
 
-function spawnProcess(command: string, args: string[], output: VSCode.OutputChannel, timeoutMs?: number): Promise<{ code: number | null }> {
+export function spawnProcess(command: string, args: string[], output: VSCode.OutputChannel, timeoutMs?: number): Promise<{ code: number | null }> {
   return new Promise((resolve, reject) => {
     output.appendLine(`$ ${command} ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`);
     const child = deps.spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });

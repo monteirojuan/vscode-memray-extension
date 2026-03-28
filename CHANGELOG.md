@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Live Mode**: Real-time memory profiling for Python scripts.
+  - Visualize heap usage and peak memory in a live chart.
+  - Track top allocators (functions/files) as the process runs.
+  - Direct source code navigation from the live top allocators table.
+  - Automatic generation of post-session artifacts (flamegraphs, stats) once the process ends.
+- Configuration `memray.liveUpdateIntervalSeconds` to control the granularity of live snapshots.
+
 ## [0.3.0] - 2026-03-19
 
 ### Added

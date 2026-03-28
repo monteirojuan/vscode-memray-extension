@@ -1,12 +1,17 @@
 import vscode from './vscodeApi';
 import * as path from 'path';
 import { promises as fs } from 'fs';
-import { runProfile } from './memray/executor';
+import { fileURLToPath } from 'url';
+import { runProfile, spawnProcess } from './memray/executor';
 import { readFlamegraphData } from './memray/flamegraphModel';
 import { readStatsSummaryFromFile } from './memray/stats';
 import { createMemrayOutputDir } from './utils/pathResolver';
 import { openNativeFlamegraphPanel } from './views/flamegraphWebview';
+import { openLiveWebviewPanel } from './views/liveWebview';
+import { startLiveSession } from './memray/liveProvider';
 import { getConfig } from './config';
+import detection from './utils/pythonDetection';
+import { detectMemrayPython } from './utils/memrayPython';
 
 interface ResultEntry {
   id: string;
@@ -372,6 +377,115 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(disposable);
+
+  // ---------------------------------------------------------------------------
+  // memray.runLive — Live profiling mode
+  // ---------------------------------------------------------------------------
+  const runLiveCmd = vscode.commands.registerCommand('memray.runLive', async (uri?: vscode.Uri) => {
+    try {
+      const editor = vscode.window.activeTextEditor;
+      const fileUri = uri || editor?.document.uri;
+      if (!fileUri) {
+        vscode.window.showWarningMessage('No file selected. Open a Python file or pass a file URI.');
+        return;
+      }
+
+      const ws = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+      if (!ws) {
+        vscode.window.showWarningMessage('Open a workspace folder before using Live Mode.');
+        return;
+      }
+
+      const scriptPath = fileUri.fsPath;
+      const conf = getConfig();
+
+      // Create a dedicated output directory for this live run so artifacts are persisted
+      const { dir: outDir, id } = await createMemrayOutputDir(ws.uri.fsPath);
+      output.appendLine(`[live] Output directory: ${outDir} (id: ${id})`);
+
+      // Open the Webview first so the user sees it immediately.
+      // NOTE: `session` is assigned only after startLiveSession resolves (async).
+      // We use a `stopRequested` flag to capture any Stop click that arrives
+      // during that window; if it fires we honour it as soon as session exists.
+      let stopRequested = false;
+      let session: Awaited<ReturnType<typeof startLiveSession>> | undefined;
+
+      const webviewPanel = openLiveWebviewPanel({
+        extensionPath: context.extensionPath,
+        title: `Live: ${path.basename(scriptPath)}`,
+        onStop: () => {
+          if (session) {
+            session.stop();
+          } else {
+            // Session is still starting — record the intent and apply it after.
+            stopRequested = true;
+          }
+        },
+        onOpenSource: async (sourcePath, line) => {
+          await openSourceLocation(ws.uri.fsPath, scriptPath, sourcePath, line, output);
+        },
+      });
+
+      const binPath = path.join(outDir, `${id}.bin`);
+
+      try {
+        session = await startLiveSession(
+          {
+            scriptPath,
+            intervalSeconds: conf.liveUpdateIntervalSeconds,
+            topN: 20,
+            pythonPath: conf.pythonPath.trim() || undefined,
+            binPath,
+          },
+          output,
+        );
+      } catch (err: unknown) {
+        webviewPanel.dispose();
+        const message = err instanceof Error ? err.message : String(err);
+        output.appendLine(`[live] Failed to start session: ${message}`);
+        vscode.window.showErrorMessage(`Memray Live: ${message}`);
+        return;
+      }
+
+      // If the user clicked Stop while the session was starting, honour it now.
+      if (stopRequested) {
+        output.appendLine('[live] Stop was requested before session started — stopping now.');
+        session.stop();
+        webviewPanel.markStopped();
+        return;
+      }
+
+      // Forward snapshots to the Webview
+      session.onSnapshot(snap => webviewPanel.postSnapshot(snap));
+
+      session.onError(err => {
+        output.appendLine(`[live] Session error: ${err.message}`);
+        vscode.window.showErrorMessage(`Memray Live error: ${err.message}`);
+      });
+
+      session.onStop(() => {
+        webviewPanel.markStopped();
+        output.appendLine('[live] Session stopped.');
+
+        // Fire-and-forget: generate post-session artifacts from the .bin file
+        void generateLiveArtifacts({
+          binPath,
+          outDir,
+          id,
+          scriptPath,
+          workspacePath: ws.uri.fsPath,
+          output,
+          provider,
+        });
+      });
+
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      output.appendLine(`[live] Unexpected error: ${message}`);
+      vscode.window.showErrorMessage(`Memray Live: ${message}`);
+    }
+  });
+  context.subscriptions.push(runLiveCmd);
 }
 
 class MemrayResultsProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
@@ -787,5 +901,182 @@ async function fileExists(filePath: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// generateLiveArtifacts — post-session artifact generation for Live Mode
+// ---------------------------------------------------------------------------
+
+const EXTENSION_SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+interface GenerateLiveArtifactsOpts {
+  binPath: string;
+  outDir: string;
+  id: string;
+  scriptPath: string;
+  workspacePath: string;
+  output: vscode.OutputChannel;
+  provider: MemrayResultsProvider;
+}
+
+async function generateLiveArtifacts(opts: GenerateLiveArtifactsOpts): Promise<void> {
+  const { binPath, outDir, id, scriptPath, workspacePath, output, provider } = opts;
+
+  // Verify the .bin file was actually written
+  if (!(await fileExists(binPath))) {
+    output.appendLine(`[live] .bin not found at ${binPath} — skipping artifact generation.`);
+    return;
+  }
+  output.appendLine(`[live] Generating artifacts from ${binPath}...`);
+
+  const htmlPath = path.join(outDir, `${id}.html`);
+  const statsPath = path.join(outDir, 'stats.json');
+  const flamegraphJsonPath = path.join(outDir, 'flamegraph.json');
+
+  // Detect memray command
+  const detected = await detection.detectMemray();
+  if (!detected?.command?.length) {
+    output.appendLine('[live] memray not found — cannot generate artifacts.');
+    return;
+  }
+  const memrayCmd = detected.command[0];
+  const memrayPrefix = detected.command.slice(1);
+
+  const errors: string[] = [];
+  let flamegraphOk = false;
+  let nativeFlamegraphOk = false;
+  let statsOk = false;
+  let memrayVersion: string | undefined;
+
+  // Generate flamegraph HTML
+  output.appendLine(`[live] Generating flamegraph HTML...`);
+  const flameArgs = [...memrayPrefix, 'flamegraph', binPath, '-o', htmlPath];
+  try {
+    const res = await spawnProcess(memrayCmd, flameArgs, output, 30_000);
+    flamegraphOk = res.code === 0;
+    if (!flamegraphOk) {
+      errors.push(`memray flamegraph exited with code ${res.code}`);
+      output.appendLine(`[live] Warning: ${errors[errors.length - 1]}`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`memray flamegraph failed: ${msg}`);
+    output.appendLine(`[live] Warning: ${errors[errors.length - 1]}`);
+  }
+
+  // Generate stats JSON
+  output.appendLine(`[live] Generating stats JSON...`);
+  const statsArgs = [...memrayPrefix, 'stats', '--json', '-o', statsPath, '-f', binPath];
+  try {
+    const res = await spawnProcess(memrayCmd, statsArgs, output, 30_000);
+    statsOk = res.code === 0;
+    if (!statsOk) {
+      errors.push(`memray stats exited with code ${res.code}`);
+      output.appendLine(`[live] Warning: ${errors[errors.length - 1]}`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`memray stats failed: ${msg}`);
+    output.appendLine(`[live] Warning: ${errors[errors.length - 1]}`);
+  }
+
+  // Generate native flamegraph JSON
+  if (statsOk) {
+    output.appendLine(`[live] Generating native flamegraph JSON...`);
+    try {
+      const conf = getConfig();
+      const memrayPython = await detectMemrayPython(
+        detected.command,
+        conf.pythonPath.trim() || undefined,
+        (await import('child_process')).spawn,
+      );
+      if (!memrayPython.pythonPath) {
+        errors.push(`memray-capable Python not found. Tried: ${memrayPython.tried.join(', ') || 'none'}`);
+        output.appendLine(`[live] Warning: ${errors[errors.length - 1]}`);
+      } else {
+        memrayVersion = memrayPython.memrayVersion;
+        const exporterPath = path.resolve(EXTENSION_SRC_DIR, '../scripts/export_flamegraph.py');
+        const exporterArgs = [
+          exporterPath,
+          '--bin', binPath,
+          '--output', flamegraphJsonPath,
+          '--run-id', id,
+          '--script', scriptPath,
+          '--stats', statsPath,
+        ];
+        const res = await spawnProcess(memrayPython.pythonPath, exporterArgs, output, 60_000);
+        nativeFlamegraphOk = res.code === 0;
+        if (!nativeFlamegraphOk) {
+          errors.push(`flamegraph exporter exited with code ${res.code}`);
+          output.appendLine(`[live] Warning: ${errors[errors.length - 1]}`);
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`flamegraph exporter failed: ${msg}`);
+      output.appendLine(`[live] Warning: ${errors[errors.length - 1]}`);
+    }
+  }
+
+  const statsSummary = statsOk ? await readStatsSummaryFromFile(statsPath) : undefined;
+  const timestamp = new Date().toISOString();
+
+  // Save meta.json
+  const meta: ResultEntry = {
+    id,
+    title: `Live: ${path.basename(scriptPath)}`,
+    script: scriptPath,
+    bin: path.relative(workspacePath, binPath),
+    html: flamegraphOk ? path.relative(workspacePath, htmlPath) : undefined,
+    flamegraphJson: nativeFlamegraphOk ? path.relative(workspacePath, flamegraphJsonPath) : undefined,
+    stats: statsOk ? path.relative(workspacePath, statsPath) : undefined,
+    timestamp,
+    peakMemoryBytes: statsSummary?.peakMemoryBytes,
+    runOk: true,
+    flamegraphOk,
+    nativeFlamegraphOk,
+    renderer: nativeFlamegraphOk ? 'native' : 'html-fallback',
+    memrayVersion,
+    statsOk,
+    errors,
+  };
+  const metaPath = path.join(outDir, 'meta.json');
+  await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+  // Update global index
+  const indexPath = path.join(workspacePath, '.memray', 'index.json');
+  let index: ResultEntry[] = [];
+  try {
+    const raw = await fs.readFile(indexPath, 'utf8');
+    index = JSON.parse(raw) as ResultEntry[];
+  } catch {
+    index = [];
+  }
+  index.unshift(meta);
+  await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf8');
+
+  provider.refresh();
+
+  const peakLabel = statsSummary?.peakMemoryBytes !== undefined
+    ? ` Peak: ${formatBytes(statsSummary.peakMemoryBytes)}.`
+    : '';
+  const statusNote = (!flamegraphOk || !statsOk) ? ' Saved as partial result.' : '';
+  vscode.window.showInformationMessage(`Memray Live session saved.${peakLabel}${statusNote}`);
+  output.appendLine(`[live] Artifacts saved to ${outDir}`);
+
+  // Auto-open flamegraph
+  if (nativeFlamegraphOk) {
+    try {
+      await vscode.commands.executeCommand('memray.openResult', path.relative(workspacePath, flamegraphJsonPath));
+    } catch (err) {
+      output.appendLine(`[live] Failed to auto-open native flamegraph: ${err}`);
+    }
+  } else if (flamegraphOk) {
+    try {
+      await vscode.commands.executeCommand('memray.openResult', path.relative(workspacePath, htmlPath));
+    } catch (err) {
+      output.appendLine(`[live] Failed to auto-open flamegraph HTML: ${err}`);
+    }
   }
 }
