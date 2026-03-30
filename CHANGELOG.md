@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.0.0] - 2026-03-30
+## [Unreleased]
+
+### Security
+- Upgraded `d3-color` from 1.0.3 to 3.1.0 to fix a ReDoS vulnerability in color string parsing (SNYK-JS-D3COLOR-1076592).  #4
+- Upgraded `picomatch` to 4.0.4 / 2.3.2 to fix two security vulnerabilities (CVE-2026-33671, CVE-2026-33672).  #7
+- Upgraded `undici` from 7.22.0 to 7.24.4 to fix a prototype pollution vulnerability.  #3
+
+### Changed
+- Upgraded `d3` from 4.13.0 to 7.9.0 and `d3-flame-graph` from 4.0.6 to 4.1.3.  #4
+
+## [0.4.0] - 2026-03-30
 
 ### Added
 - **Live Mode**: Real-time memory profiling for Python scripts.
