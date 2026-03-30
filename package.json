@@ -2,7 +2,7 @@
   "name": "memray-profiler",
   "displayName": "Memray Profiler",
   "description": "VS Code extension to run Memray and display flamegraphs",
-  "version": "0.3.0",
+  "version": "4.0.0",
   "type": "module",
   "publisher": "JuanMonteiro",
   "repository": "https://github.com/monteirojuan/vscode-memray-extension",
