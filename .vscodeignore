@@ -32,3 +32,12 @@ node_modules/**
 
 # Source maps are not needed in the VSIX
 dist/**/*.map
+
+# Python virtual environment and test artifacts
+.venv/**
+.vscode-test-userdata/**
+.ruff_cache/**
+__pycache__/**
+*.kate-swp
+AGENTS.md
+tsconfig.integration.json
