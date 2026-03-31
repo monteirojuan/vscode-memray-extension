@@ -8,6 +8,8 @@ Versions prior to `2026.3.0` used Semantic Versioning.
 
 ## [Unreleased]
 
+## [2026.3.0] - 2026-03-30
+
 ### Security
 - Upgraded `d3-color` from 1.0.3 to 3.1.0 to fix a ReDoS vulnerability in color string parsing (SNYK-JS-D3COLOR-1076592).  #4
 - Upgraded `picomatch` to 4.0.4 / 2.3.2 to fix two security vulnerabilities (CVE-2026-33671, CVE-2026-33672).  #7
