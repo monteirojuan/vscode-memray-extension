@@ -2,10 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { promisify } from 'util';
-import { exec, spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import vscode from '../vscodeApi';
 
-const execP = promisify(exec);
+const execFileP = promisify(execFile);
 
 async function fileExists(p: string): Promise<boolean> {
   try {
@@ -24,7 +24,7 @@ function workspaceFolders(): string[] {
 
 async function which(cmd: string): Promise<string | null> {
   try {
-    const { stdout } = await execP(`which ${cmd}`);
+    const { stdout } = await execFileP('which', [cmd]);
     const p = stdout.trim();
     return p || null;
   } catch {
